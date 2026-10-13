@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Spieleabend</title>
+<style>
+  :root { --bg: #f6f4ef; --card: #fff; --text: #1f1d1a; --muted: #6b665d; --line: #e4dfd5;
+          --accent: #2f6f4f; --accent-soft: #e3f0e8; --err: #b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161513; --card: #22201d; --text: #f1eee8; --muted: #a8a196; --line: #36332e;
+            --accent: #7cc59b; --accent-soft: #23362b; --err: #f2b8b5; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 96px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .muted { color: var(--muted); }
+  label.voter { display: block; margin: 20px 0 8px; font-weight: 600; }
+  select { width: 100%; font: inherit; padding: 10px 12px; border-radius: 10px;
+           border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  .hint { margin: 16px 0 8px; }
+  .game { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left;
+          padding: 10px; margin: 8px 0; border-radius: 12px; border: 2px solid var(--line);
+          background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+  .game[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .game img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; flex: none; background: var(--line); }
+  .game .name { font-weight: 600; }
+  .game .count { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); flex: none; }
+  .check { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); flex: none;
+           display: grid; place-items: center; font-size: 14px; }
+  .game[aria-pressed="true"] .check { background: var(--accent); border-color: var(--accent); color: var(--card); }
+  footer { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px;
+           background: var(--bg); border-top: 1px solid var(--line); }
+  footer div { max-width: 640px; margin: 0 auto; display: flex; gap: 12px; align-items: center; }
+  button.send { font: inherit; font-weight: 600; padding: 12px 20px; border: 0; border-radius: 10px;
+                background: var(--accent); color: var(--card); cursor: pointer; margin-left: auto; }
+  button.send:disabled { opacity: .5; cursor: default; }
+  .status { font-size: .9rem; }
+  .err { color: var(--err); }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">…</h1>
+  <div id="when" class="muted"></div>
+  <div id="closed" class="err" hidden></div>
+  <label class="voter" for="voter" id="who"></label>
+  <select id="voter"></select>
+  <p class="hint muted" id="hint"></p>
+  <div id="games"></div>
+</main>
+<footer><div><span class="status" id="status"></span><button class="send" id="send" disabled></button></div></footer>
+<script>
+(() => {
+  const de = (navigator.language || "de").toLowerCase().startsWith("de");
+  const T = de ? {
+    who: "Wer bist du?", pick: "– bitte wählen –", hint: "Tippe alle Spiele an, die du heute gern spielen würdest.",
+    send: "Stimme abgeben", saved: "Gespeichert – danke!", closed: "Die Abstimmung ist beendet.",
+    error: "Das hat nicht geklappt: ", players: "Spieler", min: "Min", vote: "Stimme", votes: "Stimmen", notfound: "Abstimmung nicht gefunden."
+  } : {
+    who: "Who are you?", pick: "– please choose –", hint: "Tap every game you'd like to play tonight.",
+    send: "Submit vote", saved: "Saved – thanks!", closed: "Voting has closed.",
+    error: "That didn't work: ", players: "players", min: "min", vote: "vote", votes: "votes", notfound: "Vote not found."
+  };
+  document.documentElement.lang = de ? "de" : "en";
+  const api = location.pathname.replace(/\/$/, "") + "/data";
+  const $ = (id) => document.getElementById(id);
+  let data = null, picked = new Set();
+
+  $("who").textContent = T.who;
+  $("hint").textContent = T.hint;
+  $("send").textContent = T.send;
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  function counts() {
+    const c = {};
+    for (const ids of Object.values(data.votes)) for (const id of ids) c[id] = (c[id] || 0) + 1;
+    return c;
+  }
+
+  function render() {
+    $("title").textContent = data.title;
+    const start = new Date(data.start);
+    $("when").textContent = isNaN(start) ? data.start
+      : start.toLocaleString(de ? "de-DE" : "en-GB", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    $("closed").hidden = data.open;
+    $("closed").textContent = T.closed;
+    const sel = $("voter"), current = sel.value;
+    sel.innerHTML = `<option value="">${T.pick}</option>` +
+      data.guests.map((g) => `<option${g === current ? " selected" : ""}>${esc(g)}</option>`).join("");
+    const c = counts();
+    $("games").innerHTML = data.candidates.map((g) => {
+      const facts = [];
+      if (g.min_players && g.max_players) facts.push(g.min_players === g.max_players ? `${g.min_players} ${T.players}` : `${g.min_players}–${g.max_players} ${T.players}`);
+      if (g.playing_time) facts.push(`${g.playing_time} ${T.min}`);
+      return `<button class="game" data-id="${g.bgg_id}" aria-pressed="${picked.has(g.bgg_id)}" ${data.open ? "" : "disabled"}>
+        <span class="check">${picked.has(g.bgg_id) ? "✓" : ""}</span>
+        ${g.thumbnail ? `<img src="${esc(g.thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}
+        <span><div class="name">${esc(g.name)}</div><div class="muted">${facts.join(" · ")}</div></span>
+        <span class="count">${c[g.bgg_id] || 0} ${c[g.bgg_id] === 1 ? T.vote : T.votes}</span></button>`;
+    }).join("");
+    $("send").disabled = !data.open || !sel.value;
+  }
+
+  $("voter").addEventListener("change", (e) => {
+    const name = e.target.value;
+    const mine = Object.entries(data.votes).find(([v]) => v.toLowerCase() === name.toLowerCase());
+    picked = new Set(mine ? mine[1] : []);
+    $("status").textContent = "";
+    render();
+  });
+
+  $("games").addEventListener("click", (e) => {
+    const btn = e.target.closest(".game");
+    if (!btn || !data.open) return;
+    const id = Number(btn.dataset.id);
+    picked.has(id) ? picked.delete(id) : picked.add(id);
+    $("status").textContent = "";
+    render();
+  });
+
+  $("send").addEventListener("click", async () => {
+    $("send").disabled = true;
+    try {
+      const resp = await fetch(api, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voter: $("voter").value, games: [...picked] }) });
+      const body = await resp.json();
+      if (!resp.ok) throw new Error(body.message || resp.status);
+      data = body;
+      $("status").className = "status";
+      $("status").textContent = T.saved;
+    } catch (err) {
+      $("status").className = "status err";
+      $("status").textContent = T.error + err.message;
+    }
+    render();
+  });
+
+  fetch(api).then((r) => r.ok ? r.json() : Promise.reject()).then((d) => { data = d; render(); })
+    .catch(() => { $("title").textContent = T.notfound; });
+})();
+</script>
+</body>
+</html>

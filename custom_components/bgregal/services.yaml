@@ -1,0 +1,251 @@
+sync_now:
+
+set_game:
+  fields:
+    bgg_id: &bgg_id
+      example: 13
+      selector:
+        number:
+          min: 1
+          max: 99999999
+          mode: box
+    name: &name
+      example: Catan
+      selector:
+        text:
+    shelf:
+      example: Regal 2
+      selector:
+        text:
+    compartment:
+      example: 3
+      selector:
+        number:
+          min: 0
+          max: 50
+          mode: box
+    in_base:
+      selector:
+        boolean:
+    nfc_tag:
+      selector:
+        text:
+    light_profile:
+      example: scene.spieleabend
+      selector:
+        entity:
+          domain:
+            - scene
+            - script
+    playlist:
+      example: https://open.spotify.com/playlist/...
+      selector:
+        text:
+    manual_url:
+      selector:
+        text:
+          type: url
+
+assign_scanned_tag:
+  fields:
+    bgg_id: *bgg_id
+    name: *name
+
+lend_game:
+  fields:
+    bgg_id: *bgg_id
+    name: *name
+    borrower:
+      required: true
+      example: Ben
+      selector:
+        text:
+
+return_game:
+  fields:
+    bgg_id: *bgg_id
+    name: *name
+
+start_session:
+  fields:
+    bgg_id: *bgg_id
+    name: *name
+    order: &names
+      example: '["Anna", "Ben"]'
+      selector:
+        text:
+          multiple: true
+
+end_session:
+
+cancel_session:
+
+next_player:
+
+next_round:
+
+set_order:
+  fields:
+    order:
+      required: true
+      example: '["Anna", "Ben"]'
+      selector:
+        text:
+          multiple: true
+
+finish_session:
+  fields:
+    players:
+      required: true
+      example: '[{"name": "Anna", "score": 42}, {"name": "Ben", "score": 38}]'
+      selector:
+        object:
+    note:
+      selector:
+        text:
+          multiline: true
+    auto_winner:
+      default: true
+      selector:
+        boolean:
+
+session_qr:
+
+suggest:
+  fields:
+    players:
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+    mode:
+      default: any
+      selector:
+        select:
+          translation_key: mode
+          options:
+            - any
+            - cooperative
+            - competitive
+    game_type:
+      default: any
+      selector:
+        select:
+          translation_key: game_type
+          options:
+            - any
+            - family
+            - strategy
+            - party
+            - abstract
+            - thematic
+            - wargame
+            - children
+    max_playtime:
+      selector:
+        number:
+          min: 0
+          max: 600
+          unit_of_measurement: min
+          mode: box
+    attendees: *names
+
+reject_suggestion:
+
+accept_suggestion:
+
+reset_suggestion:
+
+set_player:
+  fields:
+    name:
+      required: true
+      selector:
+        text:
+    bgg_username:
+      selector:
+        text:
+    dislikes:
+      selector:
+        select:
+          multiple: true
+          translation_key: dislike
+          options:
+            - cooperative
+            - competitive
+            - family
+            - strategy
+            - party
+            - abstract
+            - thematic
+            - wargame
+            - children
+
+remove_player:
+  fields:
+    name:
+      required: true
+      selector:
+        text:
+
+plan_evening:
+  fields:
+    title:
+      example: Spieleabend
+      selector:
+        text:
+    start:
+      required: true
+      selector:
+        datetime:
+    guests: *names
+    max_playtime:
+      selector:
+        number:
+          min: 0
+          max: 600
+          unit_of_measurement: min
+          mode: box
+    candidates: &ids
+      example: "[13, 822]"
+      selector:
+        object:
+
+set_candidates:
+  fields:
+    evening_id: &evening_id
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 999999
+          mode: box
+    candidates:
+      required: true
+      example: "[13, 822]"
+      selector:
+        object:
+
+remove_evening:
+  fields:
+    evening_id: *evening_id
+
+vote:
+  fields:
+    evening_id: *evening_id
+    voter:
+      required: true
+      selector:
+        text:
+    games:
+      required: true
+      example: "[13, 822]"
+      selector:
+        object:
+
+evening_qr:
+  fields:
+    evening_id: *evening_id
+
+dismiss_expansions:

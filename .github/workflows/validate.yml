@@ -15,6 +15,9 @@ jobs:
 
   hacs:
     runs-on: ubuntu-latest
+    # HACS liest manifest.json und hacs.json ohne Anmeldung; bei privatem Repo geht das nicht.
+    # Solange das Repo privat ist, nur informativ – öffentlich wird die Prüfung verpflichtend.
+    continue-on-error: ${{ github.event.repository.private }}
     steps:
       - uses: hacs/action@main
         with:

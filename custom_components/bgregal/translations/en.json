@@ -1,0 +1,434 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect BoardGameGeek",
+        "description": "BGG requires an API token for its XML API. Create one at boardgamegeek.com/applications.",
+        "data": {
+          "username": "BGG user name",
+          "token": "API token"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "BGG rejected the token.",
+      "user_not_found": "This BGG user does not exist.",
+      "cannot_connect": "Could not reach BGG. Try again later."
+    },
+    "abort": {
+      "already_configured": "BGRegal is already set up.",
+      "single_instance_allowed": "BGRegal is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BGRegal",
+        "data": {
+          "scan_interval_hours": "Sync interval",
+          "media_player": "Default media player",
+          "end_scene": "Scene at session end",
+          "loan_reminder_days": "Loan reminder after",
+          "long_unplayed_months": "Long unplayed after",
+          "notify_service": "Also notify"
+        },
+        "data_description": {
+          "scan_interval_hours": "Hours between two syncs with BGG.",
+          "media_player": "Plays a game's playlist during the session.",
+          "end_scene": "Scene or script, e.g. normal light.",
+          "loan_reminder_days": "Days until a reminder about a lent game.",
+          "long_unplayed_months": "Months since the last play.",
+          "notify_service": "Optional notify service, e.g. your phone."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "collection": {
+        "name": "Collection"
+      },
+      "plays": {
+        "name": "Plays"
+      },
+      "session": {
+        "name": "Session",
+        "state": {
+          "idle": "Idle",
+          "running": "Running",
+          "finished": "Finished"
+        }
+      },
+      "suggestion": {
+        "name": "Suggestion",
+        "state": {
+          "idle": "Idle",
+          "suggested": "Suggested",
+          "accepted": "Accepted",
+          "none": "No match"
+        }
+      },
+      "loans": {
+        "name": "Lent out"
+      },
+      "new_expansions": {
+        "name": "New expansions"
+      },
+      "last_sync": {
+        "name": "Last sync"
+      }
+    },
+    "calendar": {
+      "evenings": {
+        "name": "Game nights"
+      }
+    },
+    "button": {
+      "sync": {
+        "name": "Sync now"
+      }
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "any": "Any",
+        "cooperative": "Cooperative",
+        "competitive": "Competitive"
+      }
+    },
+    "game_type": {
+      "options": {
+        "any": "Any",
+        "family": "Family",
+        "strategy": "Strategy",
+        "party": "Party",
+        "abstract": "Abstract",
+        "thematic": "Thematic",
+        "wargame": "Wargame",
+        "children": "Children"
+      }
+    },
+    "dislike": {
+      "options": {
+        "cooperative": "Cooperative",
+        "competitive": "Competitive",
+        "family": "Family",
+        "strategy": "Strategy",
+        "party": "Party",
+        "abstract": "Abstract",
+        "thematic": "Thematic",
+        "wargame": "Wargame",
+        "children": "Children"
+      }
+    }
+  },
+  "services": {
+    "sync_now": {
+      "name": "Sync now",
+      "description": "Fetch collection, plays and wishlist from BGG."
+    },
+    "set_game": {
+      "name": "Set game details",
+      "description": "Location, NFC tag, light and sound profile, manual. Empty value clears it.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG ID",
+          "description": "BoardGameGeek ID of the game."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Game name (alternative to the BGG ID)."
+        },
+        "shelf": {
+          "name": "Shelf",
+          "description": "Name of the shelf."
+        },
+        "compartment": {
+          "name": "Compartment",
+          "description": "Compartment number from the top (0 = none)."
+        },
+        "in_base": {
+          "name": "Stored in base game",
+          "description": "Expansion is kept in the base game box."
+        },
+        "nfc_tag": {
+          "name": "NFC tag",
+          "description": "Tag ID from Settings → Tags."
+        },
+        "light_profile": {
+          "name": "Light profile",
+          "description": "Scene or script for the game."
+        },
+        "playlist": {
+          "name": "Sound profile",
+          "description": "Spotify playlist link or URI."
+        },
+        "manual_url": {
+          "name": "Manual",
+          "description": "Link to the rules."
+        }
+      }
+    },
+    "assign_scanned_tag": {
+      "name": "Assign scanned tag",
+      "description": "Assign the tag scanned in the last 10 minutes.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG ID",
+          "description": "BoardGameGeek ID of the game."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Game name (alternative to the BGG ID)."
+        }
+      }
+    },
+    "lend_game": {
+      "name": "Lend game",
+      "description": "Mark a game as lent.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG ID",
+          "description": "BoardGameGeek ID of the game."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Game name (alternative to the BGG ID)."
+        },
+        "borrower": {
+          "name": "Borrower",
+          "description": "Who has the game."
+        }
+      }
+    },
+    "return_game": {
+      "name": "Return game",
+      "description": "The game is back.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG ID",
+          "description": "BoardGameGeek ID of the game."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Game name (alternative to the BGG ID)."
+        }
+      }
+    },
+    "start_session": {
+      "name": "Start session",
+      "description": "Starts a game session with light and sound. Without a game: the accepted suggestion.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG ID",
+          "description": "BoardGameGeek ID of the game."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Game name (alternative to the BGG ID)."
+        },
+        "order": {
+          "name": "Player order",
+          "description": "Names in turn order."
+        }
+      }
+    },
+    "end_session": {
+      "name": "End session",
+      "description": "Ends the running session (music pauses, end scene runs)."
+    },
+    "cancel_session": {
+      "name": "Discard session",
+      "description": "Discards a running or closes a finished session."
+    },
+    "next_player": {
+      "name": "Next player",
+      "description": "Next player's turn."
+    },
+    "next_round": {
+      "name": "Next round",
+      "description": "Starts the next round."
+    },
+    "set_order": {
+      "name": "Set player order",
+      "description": "Sets the turn order.",
+      "fields": {
+        "order": {
+          "name": "Player order",
+          "description": "Names in turn order."
+        }
+      }
+    },
+    "finish_session": {
+      "name": "Finish session",
+      "description": "Players, scores and winner; returns link and QR code for BG Stats.",
+      "fields": {
+        "players": {
+          "name": "Players",
+          "description": "List of {name, score, winner}. Your BGG name stands for you."
+        },
+        "note": {
+          "name": "Note",
+          "description": "Comment for the play."
+        },
+        "auto_winner": {
+          "name": "Automatic winner",
+          "description": "Highest score wins if no winner is set."
+        }
+      }
+    },
+    "session_qr": {
+      "name": "Session QR code",
+      "description": "Link and QR code of the finished session for BG Stats."
+    },
+    "suggest": {
+      "name": "Suggest a game",
+      "description": "Picks matching games, preferring long-unplayed and well-rated ones.",
+      "fields": {
+        "players": {
+          "name": "Players",
+          "description": "Number of players."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Cooperative or competitive."
+        },
+        "game_type": {
+          "name": "Type",
+          "description": "Kind of game."
+        },
+        "max_playtime": {
+          "name": "Max. playing time",
+          "description": "In minutes."
+        },
+        "attendees": {
+          "name": "Attendees",
+          "description": "Their dislikes are respected."
+        }
+      }
+    },
+    "reject_suggestion": {
+      "name": "Next suggestion",
+      "description": "Rejects the current suggestion."
+    },
+    "accept_suggestion": {
+      "name": "Accept suggestion",
+      "description": "Accepts the suggestion; its location is shown."
+    },
+    "reset_suggestion": {
+      "name": "Reset suggestion",
+      "description": "Back to the start."
+    },
+    "set_player": {
+      "name": "Set player",
+      "description": "Adds or changes a player.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name of the player."
+        },
+        "bgg_username": {
+          "name": "BGG user",
+          "description": "BoardGameGeek user name (checked)."
+        },
+        "dislikes": {
+          "name": "Dislikes",
+          "description": "Kinds of games this player does not like."
+        }
+      }
+    },
+    "remove_player": {
+      "name": "Remove player",
+      "description": "Removes a player you added yourself.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name of the player."
+        }
+      }
+    },
+    "plan_evening": {
+      "name": "Plan game night",
+      "description": "Creates a game night with guests, candidates and a voting link.",
+      "fields": {
+        "title": {
+          "name": "Title",
+          "description": "Name of the evening."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Date and time."
+        },
+        "guests": {
+          "name": "Guests",
+          "description": "Names of the guests."
+        },
+        "max_playtime": {
+          "name": "Max. playing time",
+          "description": "In minutes."
+        },
+        "candidates": {
+          "name": "Games",
+          "description": "BGG IDs to vote on (empty = automatic)."
+        }
+      }
+    },
+    "set_candidates": {
+      "name": "Set games of the evening",
+      "description": "Replaces the games to vote on.",
+      "fields": {
+        "evening_id": {
+          "name": "Game night",
+          "description": "ID of the game night."
+        },
+        "candidates": {
+          "name": "Games",
+          "description": "BGG IDs."
+        }
+      }
+    },
+    "remove_evening": {
+      "name": "Remove game night",
+      "description": "Deletes a game night.",
+      "fields": {
+        "evening_id": {
+          "name": "Game night",
+          "description": "ID of the game night."
+        }
+      }
+    },
+    "vote": {
+      "name": "Vote",
+      "description": "Votes for games on behalf of a guest.",
+      "fields": {
+        "evening_id": {
+          "name": "Game night",
+          "description": "ID of the game night."
+        },
+        "voter": {
+          "name": "Voter",
+          "description": "Guest name."
+        },
+        "games": {
+          "name": "Games",
+          "description": "BGG IDs the guest wants to play."
+        }
+      }
+    },
+    "evening_qr": {
+      "name": "Voting QR code",
+      "description": "Voting link and QR code for guests.",
+      "fields": {
+        "evening_id": {
+          "name": "Game night",
+          "description": "ID of the game night."
+        }
+      }
+    },
+    "dismiss_expansions": {
+      "name": "Dismiss new expansions",
+      "description": "Marks all new expansions as seen."
+    }
+  }
+}

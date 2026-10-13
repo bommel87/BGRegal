@@ -1,0 +1,3 @@
+pytest-homeassistant-custom-component
+home-assistant-frontend
+segno==1.6.6

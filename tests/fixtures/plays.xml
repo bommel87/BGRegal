@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plays username="susi" userid="1" total="2" page="1" termsofuse="https://boardgamegeek.com/xmlapi/termsofuse">
+  <play id="9002" date="2026-10-10" quantity="1" length="95" incomplete="0" nowinstats="0" location="">
+    <item name="Catan" objecttype="thing" objectid="13"><subtypes><subtype value="boardgame"/></subtypes></item>
+    <comments>Knapp!</comments>
+    <players>
+      <player username="susi" userid="1" name="Susi" startposition="" color="" score="10" new="0" rating="0" win="1"/>
+      <player username="" userid="0" name="Anna" startposition="" color="" score="8" new="0" rating="0" win="0"/>
+      <player username="" userid="0" name="" startposition="" color="" score="" new="0" rating="0" win="0"/>
+    </players>
+  </play>
+  <play id="9001" date="2025-01-05" quantity="2" length="0" incomplete="0" nowinstats="0" location="">
+    <item name="Catan" objecttype="thing" objectid="13"><subtypes><subtype value="boardgame"/></subtypes></item>
+  </play>
+</plays>

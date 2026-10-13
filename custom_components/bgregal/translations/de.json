@@ -1,0 +1,434 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BoardGameGeek verbinden",
+        "description": "BGG verlangt für die XML-API einen Token. Du erstellst ihn unter boardgamegeek.com/applications.",
+        "data": {
+          "username": "BGG-Benutzername",
+          "token": "API-Token"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "BGG hat den Token abgelehnt.",
+      "user_not_found": "Diesen BGG-Benutzer gibt es nicht.",
+      "cannot_connect": "BGG ist nicht erreichbar. Später erneut versuchen."
+    },
+    "abort": {
+      "already_configured": "BGRegal ist bereits eingerichtet.",
+      "single_instance_allowed": "BGRegal ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BGRegal",
+        "data": {
+          "scan_interval_hours": "Sync-Intervall",
+          "media_player": "Standard-Wiedergabegerät",
+          "end_scene": "Szene bei Sitzungsende",
+          "loan_reminder_days": "Verleih-Erinnerung nach",
+          "long_unplayed_months": "„Lange nicht gespielt“ ab",
+          "notify_service": "Zusätzlich benachrichtigen"
+        },
+        "data_description": {
+          "scan_interval_hours": "Stunden zwischen zwei Abgleichen mit BGG.",
+          "media_player": "Spielt während der Sitzung die Playlist des Spiels.",
+          "end_scene": "Szene oder Skript, z. B. normales Licht.",
+          "loan_reminder_days": "Tage bis zur Erinnerung an ein verliehenes Spiel.",
+          "long_unplayed_months": "Monate seit der letzten Partie.",
+          "notify_service": "Optionaler Benachrichtigungsdienst, z. B. dein Handy."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "collection": {
+        "name": "Sammlung"
+      },
+      "plays": {
+        "name": "Partien"
+      },
+      "session": {
+        "name": "Sitzung",
+        "state": {
+          "idle": "Keine",
+          "running": "Läuft",
+          "finished": "Beendet"
+        }
+      },
+      "suggestion": {
+        "name": "Vorschlag",
+        "state": {
+          "idle": "Bereit",
+          "suggested": "Vorgeschlagen",
+          "accepted": "Angenommen",
+          "none": "Kein Treffer"
+        }
+      },
+      "loans": {
+        "name": "Verliehen"
+      },
+      "new_expansions": {
+        "name": "Neuheiten"
+      },
+      "last_sync": {
+        "name": "Letzter Sync"
+      }
+    },
+    "calendar": {
+      "evenings": {
+        "name": "Spieleabende"
+      }
+    },
+    "button": {
+      "sync": {
+        "name": "Jetzt synchronisieren"
+      }
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "any": "Egal",
+        "cooperative": "Kooperativ",
+        "competitive": "Wettkampf"
+      }
+    },
+    "game_type": {
+      "options": {
+        "any": "Egal",
+        "family": "Familie",
+        "strategy": "Strategie",
+        "party": "Party",
+        "abstract": "Abstrakt",
+        "thematic": "Thematisch",
+        "wargame": "Kriegsspiel",
+        "children": "Kinder"
+      }
+    },
+    "dislike": {
+      "options": {
+        "cooperative": "Kooperativ",
+        "competitive": "Wettkampf",
+        "family": "Familie",
+        "strategy": "Strategie",
+        "party": "Party",
+        "abstract": "Abstrakt",
+        "thematic": "Thematisch",
+        "wargame": "Kriegsspiel",
+        "children": "Kinder"
+      }
+    }
+  },
+  "services": {
+    "sync_now": {
+      "name": "Jetzt synchronisieren",
+      "description": "Sammlung, Partien und Wunschliste von BGG holen."
+    },
+    "set_game": {
+      "name": "Spiel zuordnen",
+      "description": "Standort, NFC-Tag, Licht- und Soundprofil, Anleitung. Leerer Wert löscht.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG-ID",
+          "description": "BoardGameGeek-ID des Spiels."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name des Spiels (statt der BGG-ID)."
+        },
+        "shelf": {
+          "name": "Regal",
+          "description": "Name des Regals."
+        },
+        "compartment": {
+          "name": "Fach",
+          "description": "Fachnummer von oben (0 = keins)."
+        },
+        "in_base": {
+          "name": "Liegt im Basisspiel",
+          "description": "Die Erweiterung liegt in der Schachtel des Basisspiels."
+        },
+        "nfc_tag": {
+          "name": "NFC-Tag",
+          "description": "Tag-ID aus Einstellungen → Tags."
+        },
+        "light_profile": {
+          "name": "Lichtprofil",
+          "description": "Szene oder Skript für das Spiel."
+        },
+        "playlist": {
+          "name": "Soundprofil",
+          "description": "Spotify-Playlist als Link oder URI."
+        },
+        "manual_url": {
+          "name": "Anleitung",
+          "description": "Link zur Spielanleitung."
+        }
+      }
+    },
+    "assign_scanned_tag": {
+      "name": "Gescannten Tag zuordnen",
+      "description": "Ordnet den in den letzten 10 Minuten gescannten Tag zu.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG-ID",
+          "description": "BoardGameGeek-ID des Spiels."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name des Spiels (statt der BGG-ID)."
+        }
+      }
+    },
+    "lend_game": {
+      "name": "Spiel verleihen",
+      "description": "Markiert ein Spiel als verliehen.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG-ID",
+          "description": "BoardGameGeek-ID des Spiels."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name des Spiels (statt der BGG-ID)."
+        },
+        "borrower": {
+          "name": "An wen",
+          "description": "Wer das Spiel hat."
+        }
+      }
+    },
+    "return_game": {
+      "name": "Spiel zurück",
+      "description": "Das Spiel ist zurück.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG-ID",
+          "description": "BoardGameGeek-ID des Spiels."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name des Spiels (statt der BGG-ID)."
+        }
+      }
+    },
+    "start_session": {
+      "name": "Sitzung starten",
+      "description": "Startet eine Spielsitzung mit Licht und Sound. Ohne Spiel: der angenommene Vorschlag.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG-ID",
+          "description": "BoardGameGeek-ID des Spiels."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name des Spiels (statt der BGG-ID)."
+        },
+        "order": {
+          "name": "Reihenfolge",
+          "description": "Namen in Zugreihenfolge."
+        }
+      }
+    },
+    "end_session": {
+      "name": "Sitzung beenden",
+      "description": "Beendet die laufende Sitzung (Musik pausiert, Szene für Sitzungsende läuft)."
+    },
+    "cancel_session": {
+      "name": "Sitzung verwerfen",
+      "description": "Verwirft eine laufende oder schließt eine beendete Sitzung."
+    },
+    "next_player": {
+      "name": "Nächster Spieler",
+      "description": "Der nächste Spieler ist dran."
+    },
+    "next_round": {
+      "name": "Nächste Runde",
+      "description": "Beginnt die nächste Runde."
+    },
+    "set_order": {
+      "name": "Reihenfolge setzen",
+      "description": "Legt die Zugreihenfolge fest.",
+      "fields": {
+        "order": {
+          "name": "Reihenfolge",
+          "description": "Namen in Zugreihenfolge."
+        }
+      }
+    },
+    "finish_session": {
+      "name": "Sitzung abschließen",
+      "description": "Mitspieler, Punkte und Gewinner; liefert Link und QR-Code für BG Stats.",
+      "fields": {
+        "players": {
+          "name": "Spieler",
+          "description": "Liste aus {name, score, winner}. Dein BGG-Name steht für dich."
+        },
+        "note": {
+          "name": "Notiz",
+          "description": "Kommentar zur Partie."
+        },
+        "auto_winner": {
+          "name": "Gewinner automatisch",
+          "description": "Höchste Punktzahl gewinnt, wenn kein Gewinner gesetzt ist."
+        }
+      }
+    },
+    "session_qr": {
+      "name": "QR-Code der Sitzung",
+      "description": "Link und QR-Code der abgeschlossenen Sitzung für BG Stats."
+    },
+    "suggest": {
+      "name": "Spiel vorschlagen",
+      "description": "Wählt passende Spiele, bevorzugt lange nicht gespielte und gut bewertete.",
+      "fields": {
+        "players": {
+          "name": "Spieler",
+          "description": "Anzahl der Spieler."
+        },
+        "mode": {
+          "name": "Modus",
+          "description": "Kooperativ oder Wettkampf."
+        },
+        "game_type": {
+          "name": "Typ",
+          "description": "Art des Spiels."
+        },
+        "max_playtime": {
+          "name": "Max. Spieldauer",
+          "description": "In Minuten."
+        },
+        "attendees": {
+          "name": "Anwesende",
+          "description": "Deren Vorlieben werden berücksichtigt."
+        }
+      }
+    },
+    "reject_suggestion": {
+      "name": "Nächster Vorschlag",
+      "description": "Lehnt den aktuellen Vorschlag ab."
+    },
+    "accept_suggestion": {
+      "name": "Vorschlag annehmen",
+      "description": "Nimmt den Vorschlag an; der Standort wird angezeigt."
+    },
+    "reset_suggestion": {
+      "name": "Vorschlag zurücksetzen",
+      "description": "Zurück zum Anfang."
+    },
+    "set_player": {
+      "name": "Mitspieler setzen",
+      "description": "Legt einen Mitspieler an oder ändert ihn.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name des Mitspielers."
+        },
+        "bgg_username": {
+          "name": "BGG-Benutzer",
+          "description": "BoardGameGeek-Benutzername (wird geprüft)."
+        },
+        "dislikes": {
+          "name": "Mag nicht",
+          "description": "Arten von Spielen, die dieser Mitspieler nicht mag."
+        }
+      }
+    },
+    "remove_player": {
+      "name": "Mitspieler entfernen",
+      "description": "Entfernt einen selbst angelegten Mitspieler.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name des Mitspielers."
+        }
+      }
+    },
+    "plan_evening": {
+      "name": "Spieleabend planen",
+      "description": "Legt einen Spieleabend mit Gästen, Auswahl und Abstimm-Link an.",
+      "fields": {
+        "title": {
+          "name": "Titel",
+          "description": "Name des Abends."
+        },
+        "start": {
+          "name": "Beginn",
+          "description": "Datum und Uhrzeit."
+        },
+        "guests": {
+          "name": "Gäste",
+          "description": "Namen der Gäste."
+        },
+        "max_playtime": {
+          "name": "Max. Spieldauer",
+          "description": "In Minuten."
+        },
+        "candidates": {
+          "name": "Spiele",
+          "description": "BGG-IDs zur Abstimmung (leer = automatisch)."
+        }
+      }
+    },
+    "set_candidates": {
+      "name": "Spiele des Abends setzen",
+      "description": "Ersetzt die Spiele zur Abstimmung.",
+      "fields": {
+        "evening_id": {
+          "name": "Spieleabend",
+          "description": "ID des Spieleabends."
+        },
+        "candidates": {
+          "name": "Spiele",
+          "description": "BGG-IDs."
+        }
+      }
+    },
+    "remove_evening": {
+      "name": "Spieleabend löschen",
+      "description": "Löscht einen Spieleabend.",
+      "fields": {
+        "evening_id": {
+          "name": "Spieleabend",
+          "description": "ID des Spieleabends."
+        }
+      }
+    },
+    "vote": {
+      "name": "Abstimmen",
+      "description": "Stimmt für einen Gast ab.",
+      "fields": {
+        "evening_id": {
+          "name": "Spieleabend",
+          "description": "ID des Spieleabends."
+        },
+        "voter": {
+          "name": "Wer",
+          "description": "Name des Gastes."
+        },
+        "games": {
+          "name": "Spiele",
+          "description": "BGG-IDs, die der Gast spielen möchte."
+        }
+      }
+    },
+    "evening_qr": {
+      "name": "Abstimm-QR-Code",
+      "description": "Abstimm-Link und QR-Code für Gäste.",
+      "fields": {
+        "evening_id": {
+          "name": "Spieleabend",
+          "description": "ID des Spieleabends."
+        }
+      }
+    },
+    "dismiss_expansions": {
+      "name": "Neuheiten gesehen",
+      "description": "Markiert alle neuen Erweiterungen als gesehen."
+    }
+  }
+}

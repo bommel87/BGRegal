@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<items totalitems="2" termsofuse="https://boardgamegeek.com/xmlapi/termsofuse" pubdate="Tue, 14 Oct 2026 10:00:00 +0000">
+  <item objecttype="thing" objectid="13" subtype="boardgame" collid="1001">
+    <name sortindex="1">Catan</name>
+    <yearpublished>1995</yearpublished>
+    <image>https://cf.geekdo-images.com/catan.jpg</image>
+    <thumbnail>https://cf.geekdo-images.com/catan_t.jpg</thumbnail>
+    <stats minplayers="3" maxplayers="4" playingtime="120" numowned="200000">
+      <rating value="7.5"><average value="7.1"/></rating>
+    </stats>
+    <status own="1" prevowned="0" fortrade="0" want="0" wanttoplay="0" wanttobuy="0" wishlist="0" preordered="0" lastmodified="2026-01-01 10:00:00"/>
+    <numplays>12</numplays>
+    <version>
+      <item type="boardgameversion" id="555">
+        <name type="primary" sortindex="1" value="German edition"/>
+        <link type="language" id="2188" value="German"/>
+      </item>
+    </version>
+  </item>
+  <item objecttype="thing" objectid="174430" subtype="boardgame" collid="1002">
+    <name sortindex="1">Gloomhaven</name>
+    <yearpublished>2017</yearpublished>
+    <stats minplayers="1" maxplayers="4" playingtime="120">
+      <rating value="N/A"><average value="8.6"/></rating>
+    </stats>
+    <status own="0" prevowned="0" fortrade="0" want="0" wanttoplay="0" wanttobuy="0" wishlist="1" wishlistpriority="2" preordered="0" lastmodified="2026-02-01 10:00:00"/>
+    <numplays>0</numplays>
+  </item>
+</items>

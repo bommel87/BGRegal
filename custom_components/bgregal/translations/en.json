@@ -266,7 +266,7 @@
       "fields": {
         "players": {
           "name": "Players",
-          "description": "List of {name, score, winner}. Your BGG name stands for you."
+          "description": "List of players with name, score and winner. Your BGG name stands for you."
         },
         "note": {
           "name": "Note",

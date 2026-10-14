@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.1.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.1.1";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -601,14 +601,14 @@ class BgRegalPanel extends HTMLElement {
       case "evguest": { const ev = ui.evening; ev.guests = ev.guests.includes(v) ? ev.guests.filter((n) => n !== v) : [...ev.guests, v]; break; }
       case "evaddguest": { const ev = ui.evening; const n = ev.newGuest.trim(); if (n && !ev.guests.includes(n)) ev.guests.push(n); ev.newGuest = ""; break; }
       case "evcreate": {
-        const ev = ui.evening, data = { title: ev.title, start: ev.start.replace("T", " ") + ":00", guests: ev.guests };
+        const ev = ui.evening, data = { title: ev.title, start: ev.start.replace("T", " ") + ":00", guests: ev.guests, base_url: location.origin };
         if (ev.max_playtime) data.max_playtime = Number(ev.max_playtime);
         const res = await this._call("plan_evening", data, true);
         if (res) { ui.evening = null; ui.qr = { title: t.voteLink, svg: res.qr_svg, url: res.vote_url, open: t.openVote, hint: t.voteHint }; }
         break;
       }
       case "eveqr": {
-        const res = await this._call("evening_qr", { evening_id: Number(v) }, true);
+        const res = await this._call("evening_qr", { evening_id: Number(v), base_url: location.origin }, true);
         if (res) ui.qr = { title: t.voteLink, svg: res.qr_svg, url: res.vote_url, open: t.openVote, hint: t.voteHint };
         break;
       }

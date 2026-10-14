@@ -149,7 +149,8 @@ python -m venv .venv
 ```
 
 Der Kern (`custom_components/bgregal/core/`) kommt ohne Home Assistant aus und wird direkt getestet. Panel, Kachel
-und Abstimmseite sind reines JavaScript ohne Build-Schritt.
+und Abstimmseite sind reines JavaScript ohne Build-Schritt. Die Übersetzungen (`translations/de.json`, `en.json`)
+entstehen aus `scripts/make_translations.py`; Texte dort ändern und das Skript ausführen.
 
 ## Lizenz
 

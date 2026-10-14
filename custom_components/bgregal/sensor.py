@@ -44,7 +44,6 @@ class Spec:
     object_id: str
     value: Callable[[Any], Any]
     attrs: Callable[[Any], dict[str, Any]] = lambda _r: {}
-    unit: str | None = None
     icon: str | None = None
     device_class: SensorDeviceClass | None = None
     state_class: SensorStateClass | None = None
@@ -143,16 +142,16 @@ def _last_sync(regal) -> datetime | None:
 
 SPECS = (
     Spec("collection", "sammlung", lambda r: r.snapshot.get("stats", {}).get("games", 0),
-         _collection_attrs, unit="games", icon="mdi:bookshelf", state_class=SensorStateClass.MEASUREMENT),
+         _collection_attrs, icon="mdi:bookshelf", state_class=SensorStateClass.MEASUREMENT),
     Spec("plays", "partien", lambda r: r.snapshot.get("stats", {}).get("plays_total", 0),
-         _plays_attrs, unit="plays", icon="mdi:dice-multiple", state_class=SensorStateClass.TOTAL),
+         _plays_attrs, icon="mdi:dice-multiple", state_class=SensorStateClass.TOTAL),
     Spec("session", "sitzung", _session_state, _session_attrs, icon="mdi:timer-play-outline"),
     Spec("suggestion", "vorschlag", lambda r: r.suggestion.get("phase", "idle"), _suggestion_attrs,
          icon="mdi:lightbulb-on-outline"),
     Spec("loans", "verliehen", lambda r: len(r.snapshot.get("loans", [])), _loans_attrs,
-         unit="games", icon="mdi:hand-extended-outline"),
+         icon="mdi:hand-extended-outline"),
     Spec("new_expansions", "neuheiten", lambda r: len(r.snapshot.get("new_expansions", [])),
-         _expansion_attrs, unit="expansions", icon="mdi:new-box"),
+         _expansion_attrs, icon="mdi:new-box"),
     Spec("last_sync", "letzter_sync", _last_sync,
          lambda r: {"error": r.entry.runtime_data.last_error}, icon="mdi:sync",
          device_class=SensorDeviceClass.TIMESTAMP),
@@ -173,7 +172,6 @@ class BgRegalSensor(BgRegalEntity, SensorEntity):
     def __init__(self, coordinator, spec: Spec) -> None:
         super().__init__(coordinator, spec.key, "sensor", spec.object_id)
         self._spec = spec
-        self._attr_native_unit_of_measurement = spec.unit
         self._attr_icon = spec.icon
         self._attr_device_class = spec.device_class
         self._attr_state_class = spec.state_class

@@ -46,10 +46,12 @@
   "entity": {
     "sensor": {
       "collection": {
-        "name": "Collection"
+        "name": "Collection",
+        "unit_of_measurement": "games"
       },
       "plays": {
-        "name": "Plays"
+        "name": "Plays",
+        "unit_of_measurement": "plays"
       },
       "session": {
         "name": "Session",
@@ -69,10 +71,12 @@
         }
       },
       "loans": {
-        "name": "Lent out"
+        "name": "Lent out",
+        "unit_of_measurement": "games"
       },
       "new_expansions": {
-        "name": "New expansions"
+        "name": "New expansions",
+        "unit_of_measurement": "expansions"
       },
       "last_sync": {
         "name": "Last sync"
@@ -371,6 +375,10 @@
         "candidates": {
           "name": "Games",
           "description": "BGG IDs to vote on (empty = automatic)."
+        },
+        "base_url": {
+          "name": "Base URL",
+          "description": "Address for the voting link, e.g. https://ha.example.com:8123. Default: the external URL of Home Assistant."
         }
       }
     },
@@ -423,6 +431,10 @@
         "evening_id": {
           "name": "Game night",
           "description": "ID of the game night."
+        },
+        "base_url": {
+          "name": "Base URL",
+          "description": "Address for the voting link, e.g. https://ha.example.com:8123. Default: the external URL of Home Assistant."
         }
       }
     },

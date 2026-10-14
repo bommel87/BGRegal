@@ -378,7 +378,7 @@
         },
         "base_url": {
           "name": "Basis-Adresse",
-          "description": "Adresse für den Abstimm-Link, z. B. https://ha.example.com:8123. Standard: die externe URL von Home Assistant."
+          "description": "Adresse für den Abstimm-Link mit Port, so wie du Home Assistant im Browser öffnest. Standard: die externe URL von Home Assistant."
         }
       }
     },
@@ -434,7 +434,7 @@
         },
         "base_url": {
           "name": "Basis-Adresse",
-          "description": "Adresse für den Abstimm-Link, z. B. https://ha.example.com:8123. Standard: die externe URL von Home Assistant."
+          "description": "Adresse für den Abstimm-Link mit Port, so wie du Home Assistant im Browser öffnest. Standard: die externe URL von Home Assistant."
         }
       }
     },

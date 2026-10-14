@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=1.0.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.1.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 

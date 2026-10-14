@@ -97,6 +97,9 @@ async def test_config_flow_bad_token(hass: HomeAssistant) -> None:
 
 async def test_entities_after_sync(hass: HomeAssistant, regal) -> None:
     assert hass.states.get("sensor.bgregal_sammlung").state == "2"
+    # Einheit kommt aus den Übersetzungen (Test-HA läuft auf Englisch)
+    assert hass.states.get("sensor.bgregal_sammlung").attributes["unit_of_measurement"] == "games"
+    assert hass.states.get("sensor.bgregal_partien").attributes["unit_of_measurement"] == "plays"
     assert hass.states.get("sensor.bgregal_partien").state == "1"
     assert hass.states.get("sensor.bgregal_sitzung").state == "idle"
     assert hass.states.get("sensor.bgregal_vorschlag").state == "idle"
@@ -189,10 +192,18 @@ async def test_websocket_data(hass: HomeAssistant, regal, hass_ws_client) -> Non
 async def test_evening_public_vote(hass: HomeAssistant, regal, hass_client_no_auth) -> None:
     res = await hass.services.async_call(
         DOMAIN, "plan_evening",
-        {"title": "Freitag", "start": "2099-01-01 19:00:00", "guests": ["Anna"], "candidates": [13, 822]},
+        {"title": "Freitag", "start": "2099-01-01 19:00:00", "guests": ["Anna"], "candidates": [13, 822],
+         "base_url": "https://ha.example.com:8123"},
         blocking=True, return_response=True,
     )
+    # Die Adresse des Panels hat Vorrang vor der externen URL von HA (die oft ohne Port eingetragen ist)
+    assert res["vote_url"].startswith("https://ha.example.com:8123/api/bgregal/vote/")
     token = res["vote_url"].rsplit("/", 1)[1]
+    qr = await hass.services.async_call(
+        DOMAIN, "evening_qr", {"evening_id": res["evening_id"], "base_url": "https://ha.example.com:8123/"},
+        blocking=True, return_response=True,
+    )
+    assert qr["vote_url"] == res["vote_url"]
     client = await hass_client_no_auth()
 
     page = await client.get(f"/api/bgregal/vote/{token}")

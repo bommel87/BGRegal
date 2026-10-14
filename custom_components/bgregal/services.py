@@ -18,6 +18,7 @@ from .runtime import BgRegal
 GAME = {vol.Optional("bgg_id"): vol.Coerce(int), vol.Optional("name"): cv.string}
 NAMES = vol.All(cv.ensure_list, [cv.string])
 IDS = vol.All(cv.ensure_list, [vol.Coerce(int)])
+BASE_URL = vol.All(cv.string, vol.Match(r"^https?://[^/\s]+/?$"))  # nur Schema, Host und Port
 
 SCHEMAS: dict[str, vol.Schema] = {
     "sync_now": vol.Schema({}),
@@ -88,6 +89,7 @@ SCHEMAS: dict[str, vol.Schema] = {
             vol.Optional("guests", default=[]): NAMES,
             vol.Optional("max_playtime"): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=0))),
             vol.Optional("candidates"): IDS,
+            vol.Optional("base_url"): BASE_URL,
         }
     ),
     "set_candidates": vol.Schema({vol.Required("evening_id"): vol.Coerce(int), vol.Required("candidates"): IDS}),
@@ -95,7 +97,9 @@ SCHEMAS: dict[str, vol.Schema] = {
     "vote": vol.Schema(
         {vol.Required("evening_id"): vol.Coerce(int), vol.Required("voter"): cv.string, vol.Required("games"): IDS}
     ),
-    "evening_qr": vol.Schema({vol.Required("evening_id"): vol.Coerce(int)}),
+    "evening_qr": vol.Schema(
+        {vol.Required("evening_id"): vol.Coerce(int), vol.Optional("base_url"): BASE_URL}
+    ),
     "dismiss_expansions": vol.Schema({}),
 }
 
@@ -170,7 +174,8 @@ async def _handle(regal: BgRegal, service: str, d: dict[str, Any]) -> dict[str, 
             await regal.async_remove_player(d["name"])
         case "plan_evening":
             return await regal.async_plan_evening(
-                d["title"], _local(d["start"]), d["guests"], d.get("max_playtime"), d.get("candidates")
+                d["title"], _local(d["start"]), d["guests"], d.get("max_playtime"), d.get("candidates"),
+                d.get("base_url"),
             )
         case "set_candidates":
             await regal.async_set_candidates(d["evening_id"], d["candidates"])
@@ -179,7 +184,7 @@ async def _handle(regal: BgRegal, service: str, d: dict[str, Any]) -> dict[str, 
         case "vote":
             await regal.async_vote(d["evening_id"], d["voter"], d["games"])
         case "evening_qr":
-            return await regal.async_evening_qr(d["evening_id"])
+            return await regal.async_evening_qr(d["evening_id"], d.get("base_url"))
         case "dismiss_expansions":
             await regal.async_dismiss_expansions()
     return None

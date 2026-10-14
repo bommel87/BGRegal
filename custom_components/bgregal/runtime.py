@@ -489,8 +489,12 @@ class BgRegal:
         await self.async_refresh()
 
     # ---- Spieleabende --------------------------------------------------------
-    def vote_url(self, token: str) -> str:
+    def vote_url(self, token: str, base_url: str | None = None) -> str:
+        """Link zur Abstimmseite. `base_url` (z. B. die Adresse, unter der das Panel offen ist)
+        hat Vorrang, weil die in HA hinterlegte externe URL oft ohne Port eingetragen ist."""
         path = f"/api/bgregal/vote/{token}"
+        if base_url:
+            return base_url.rstrip("/") + path
         try:
             return get_url(self.hass, prefer_external=True) + path
         except NoURLAvailableError:
@@ -509,6 +513,7 @@ class BgRegal:
         guests: list[str],
         max_playtime: int | None,
         candidates: list[int] | None,
+        base_url: str | None = None,
     ) -> dict[str, Any]:
         guests = [g.strip() for g in guests if g.strip()]
         if candidates is None:
@@ -526,7 +531,7 @@ class BgRegal:
             max_playtime, token, guests, candidates,
         )
         await self.async_refresh()
-        url = self.vote_url(token)
+        url = self.vote_url(token, base_url)
         return {"evening_id": evening_id, "vote_url": url, "qr_svg": await self._run(qr_svg, url)}
 
     async def async_set_candidates(self, evening_id: int, candidates: list[int]) -> None:
@@ -554,8 +559,8 @@ class BgRegal:
         if set(bgg_ids) - set(evening["candidates"]):
             raise ServiceValidationError("Nur Spiele aus der Auswahl des Abends sind möglich")
 
-    async def async_evening_qr(self, evening_id: int) -> dict[str, Any]:
-        url = self.vote_url(self._evening(evening_id)["token"])
+    async def async_evening_qr(self, evening_id: int, base_url: str | None = None) -> dict[str, Any]:
+        url = self.vote_url(self._evening(evening_id)["token"], base_url)
         return {"vote_url": url, "qr_svg": await self._run(qr_svg, url)}
 
     def evening_open(self, evening: dict[str, Any]) -> bool:

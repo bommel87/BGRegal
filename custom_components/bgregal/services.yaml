@@ -211,6 +211,11 @@ plan_evening:
       example: "[13, 822]"
       selector:
         object:
+    base_url: &base_url
+      example: https://ha.example.com:8123
+      selector:
+        text:
+          type: url
 
 set_candidates:
   fields:
@@ -247,5 +252,6 @@ vote:
 evening_qr:
   fields:
     evening_id: *evening_id
+    base_url: *base_url
 
 dismiss_expansions:

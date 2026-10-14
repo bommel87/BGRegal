@@ -46,10 +46,12 @@
   "entity": {
     "sensor": {
       "collection": {
-        "name": "Sammlung"
+        "name": "Sammlung",
+        "unit_of_measurement": "Spiele"
       },
       "plays": {
-        "name": "Partien"
+        "name": "Partien",
+        "unit_of_measurement": "Partien"
       },
       "session": {
         "name": "Sitzung",
@@ -69,10 +71,12 @@
         }
       },
       "loans": {
-        "name": "Verliehen"
+        "name": "Verliehen",
+        "unit_of_measurement": "Spiele"
       },
       "new_expansions": {
-        "name": "Neuheiten"
+        "name": "Neuheiten",
+        "unit_of_measurement": "Erweiterungen"
       },
       "last_sync": {
         "name": "Letzter Sync"
@@ -371,6 +375,10 @@
         "candidates": {
           "name": "Spiele",
           "description": "BGG-IDs zur Abstimmung (leer = automatisch)."
+        },
+        "base_url": {
+          "name": "Basis-Adresse",
+          "description": "Adresse für den Abstimm-Link, z. B. https://ha.example.com:8123. Standard: die externe URL von Home Assistant."
         }
       }
     },
@@ -423,6 +431,10 @@
         "evening_id": {
           "name": "Spieleabend",
           "description": "ID des Spieleabends."
+        },
+        "base_url": {
+          "name": "Basis-Adresse",
+          "description": "Adresse für den Abstimm-Link, z. B. https://ha.example.com:8123. Standard: die externe URL von Home Assistant."
         }
       }
     },

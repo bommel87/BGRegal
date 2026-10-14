@@ -14,8 +14,8 @@ GAME_FIELDS = {
 }
 ORDER = {"order": ("Player order", "Names in turn order.", "Reihenfolge", "Namen in Zugreihenfolge.")}
 EVENING = {"evening_id": ("Game night", "ID of the game night.", "Spieleabend", "ID des Spieleabends.")}
-BASE = {"base_url": ("Base URL", "Address for the voting link, e.g. https://ha.example.com:8123. Default: the external URL of Home Assistant.",
-                     "Basis-Adresse", "Adresse für den Abstimm-Link, z. B. https://ha.example.com:8123. Standard: die externe URL von Home Assistant.")}
+BASE = {"base_url": ("Base URL", "Address for the voting link including port, as you open Home Assistant in the browser. Default: the external URL of Home Assistant.",
+                     "Basis-Adresse", "Adresse für den Abstimm-Link mit Port, so wie du Home Assistant im Browser öffnest. Standard: die externe URL von Home Assistant.")}
 UNITS = {
     "collection": ("games", "Spiele"),
     "plays": ("plays", "Partien"),

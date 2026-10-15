@@ -11,6 +11,8 @@ def test_collection():
     assert catan.bgg_id == 13 and catan.name == "Catan" and catan.owned
     assert catan.user_rating == 7.5
     assert catan.version_name == "German edition" and catan.languages == ["German"]
+    assert (catan.box_width, catan.box_length, catan.box_depth) == (11.6, 11.6, 2.8)
+    assert gloom.box_depth is None  # keine Ausgabe gewählt
     assert gloom.wishlist and gloom.wishlist_priority == 2 and gloom.user_rating is None
 
 

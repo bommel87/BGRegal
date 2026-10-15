@@ -80,6 +80,10 @@
       },
       "last_sync": {
         "name": "Letzter Sync"
+      },
+      "shelf": {
+        "name": "Spiele",
+        "unit_of_measurement": "Spiele"
       }
     },
     "calendar": {
@@ -111,6 +115,12 @@
         "thematic": "Thematisch",
         "wargame": "Kriegsspiel",
         "children": "Kinder"
+      }
+    },
+    "layout": {
+      "options": {
+        "upright": "Stehend",
+        "stacked": "Liegend"
       }
     },
     "dislike": {
@@ -171,6 +181,56 @@
         "manual_url": {
           "name": "Anleitung",
           "description": "Link zur Spielanleitung."
+        },
+        "ean": {
+          "name": "EAN",
+          "description": "Barcode auf der Schachtel (8, 12, 13 oder 14 Ziffern)."
+        }
+      }
+    },
+    "scan_code": {
+      "name": "Code gescannt",
+      "description": "Barcode (EAN) oder Tag gescannt: startet oder beendet die Sitzung wie ein NFC-Tag; unbekannte Codes werden gemeldet.",
+      "fields": {
+        "code": {
+          "name": "Code",
+          "description": "Gescannte EAN oder Tag-ID."
+        }
+      }
+    },
+    "set_shelf": {
+      "name": "Regal einstellen",
+      "description": "Raum, Darstellung, Fächer oder neuer Name eines Regals.",
+      "fields": {
+        "name": {
+          "name": "Regal",
+          "description": "Bisheriger Name des Regals."
+        },
+        "new_name": {
+          "name": "Neuer Name",
+          "description": "Benennt das Regal bei allen Spielen darin um."
+        },
+        "area_id": {
+          "name": "Raum",
+          "description": "Bereich des Regals in Home Assistant (leer = keiner)."
+        },
+        "layout": {
+          "name": "Darstellung",
+          "description": "Kartons stehend oder liegend gestapelt."
+        },
+        "compartments": {
+          "name": "Fächer",
+          "description": "Anzahl der angezeigten Fächer (0 = wie belegt)."
+        }
+      }
+    },
+    "remove_shelf": {
+      "name": "Regal entfernen",
+      "description": "Entfernt ein leeres Regal.",
+      "fields": {
+        "name": {
+          "name": "Regal",
+          "description": "Name des Regals."
         }
       }
     },

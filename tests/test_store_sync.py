@@ -1,8 +1,10 @@
 import asyncio
+import io
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from PIL import Image
 
 from conftest import fixture
 from core.parser import EXPANSION, CollectionItem, Play, PlayPlayer, parse_things
@@ -19,7 +21,8 @@ async def direct(fn, *args):
 class FakeClient:
     def __init__(self):
         self.owned = [
-            CollectionItem(bgg_id=13, name="Catan", subtype="boardgame", owned=True, user_rating=7.5),
+            CollectionItem(bgg_id=13, name="Catan", subtype="boardgame", owned=True, user_rating=7.5,
+                           thumbnail="https://img/catan.png", box_depth=2.8),
             CollectionItem(bgg_id=325, name="Catan: Seafarers", subtype=EXPANSION, owned=True),
         ]
         self.things = parse_things(fixture("things.xml"))
@@ -30,6 +33,7 @@ class FakeClient:
         ])}
         self.thing_calls: list[list[int]] = []
         self.play_pages: list[int] = []
+        self.image_calls: list[str] = []
 
     async def fetch_owned(self):
         return self.owned
@@ -40,6 +44,12 @@ class FakeClient:
     async def fetch_things(self, ids):
         self.thing_calls.append(ids)
         return {i: self.things[i] for i in ids if i in self.things}
+
+    async def fetch_image(self, url):
+        self.image_calls.append(url)
+        buf = io.BytesIO()
+        Image.new("RGB", (20, 20), (200, 30, 40)).save(buf, "PNG")  # rotes Cover
+        return buf.getvalue()
 
     async def fetch_plays(self, page):
         self.play_pages.append(page)
@@ -160,7 +170,7 @@ def test_migrates_schema_1(tmp_path):
     old.close()
     s = Store(str(path))
     try:
-        assert s.get_meta("schema") == "2"
+        assert s.get_meta("schema") == "3"
         assert s.players("susi") == [
             {"name": "Ben", "plays": 0, "from_bgg": False, "bgg_username": "", "dislikes": [], "hidden": False}
         ]
@@ -176,3 +186,32 @@ def test_session_roundtrip(store):
     assert store.get_session()["name"] == "Catan"
     store.set_session(None)
     assert store.get_session() is None
+
+
+def test_colors_once_per_cover(store):
+    client = FakeClient()
+    asyncio.run(run_sync(client, store, direct, NOW))
+    catan = store.game(13)
+    assert catan["color"] == "#c81e28" and catan["box_depth"] == 2.8
+    assert "color_src" not in catan
+    asyncio.run(run_sync(client, store, direct, NOW + timedelta(hours=1)))
+    assert client.image_calls == ["https://img/catan.png"]  # zweiter Sync lädt das Cover nicht erneut
+
+
+def test_shelves_and_ean(store):
+    asyncio.run(run_sync(FakeClient(), store, direct, NOW))
+    store.set_game_meta(13, {"shelf": "Billy", "compartment": 3, "ean": "4002051693602"})
+    store.set_game_meta(325, {"shelf": "Billy", "in_base": 1})  # liegt im Basisspiel, zählt nicht
+    store.set_shelf("Keller", area_id="keller", layout="stacked")
+    shelves = {s["name"]: s for s in store.shelves()}
+    assert shelves["Billy"] == {"name": "Billy", "games": 1, "max_compartment": 3, "area_id": "",
+                                "layout": "upright", "compartments": 3}
+    assert shelves["Keller"]["games"] == 0 and shelves["Keller"]["layout"] == "stacked"
+    assert store.game_by_ean("4002051693602") == 13 and store.game_by_ean("1") is None
+
+    store.set_shelf("Billy", new_name="Billy Wohnzimmer", area_id="wohnzimmer", compartments=6)
+    assert store.game(13)["shelf"] == "Billy Wohnzimmer"
+    billy = next(s for s in store.shelves() if s["name"] == "Billy Wohnzimmer")
+    assert billy["area_id"] == "wohnzimmer" and billy["compartments"] == 6
+    assert not store.remove_shelf("Billy Wohnzimmer")  # noch Spiele darin
+    assert store.remove_shelf("Keller")

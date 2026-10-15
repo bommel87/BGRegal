@@ -15,6 +15,8 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.network import NoURLAvailableError, get_url
@@ -28,7 +30,9 @@ from .const import (
     CONF_NOTIFY,
     CONF_USERNAME,
     DEFAULTS,
+    DOMAIN,
     EVENING_CANDIDATES,
+    EVENT_UNKNOWN_CODE,
     EVENT_LOAN_OVERDUE,
     EVENT_NEW_EXPANSION,
     EVENT_SESSION_ENDED,
@@ -45,7 +49,7 @@ from .core.errors import BggError
 from .core.store import Store
 from .core.suggest import DISLIKE_OPTIONS
 from .core.sync import SyncResult
-from .core.util import normalize_playlist, playlist_media_type, valid_light_profile
+from .core.util import normalize_ean, normalize_playlist, playlist_media_type, valid_light_profile
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -109,13 +113,98 @@ class BgRegal:
             "new_expansions": self.store.new_expansions(),
             "evenings": self.store.evenings(),
             "session": session,
+            "shelves": self.store.shelves(),
             "last_sync": self.store.get_meta("last_sync"),
         }
 
     async def async_refresh(self) -> None:
-        """Datenstand neu lesen und Entitäten benachrichtigen."""
+        """Datenstand neu lesen, Regal-Geräte abgleichen und Entitäten benachrichtigen."""
         self.snapshot = await self._run(self._build_snapshot)
+        self._sync_shelf_devices()
         async_dispatcher_send(self.hass, SIGNAL_UPDATE)
+
+    # ---- Regale als Geräte -----------------------------------------------------
+    def shelf_device_id(self, name: str) -> tuple[str, str]:
+        return (DOMAIN, f"{self.entry.entry_id}_shelf_{name.lower()}")
+
+    def shelf_device(self, name: str) -> dr.DeviceEntry | None:
+        registry = dr.async_get(self.hass)
+        ident = self.shelf_device_id(name)
+        # Ab HA 2026.10 eindeutig je Config-Entry; ältere Versionen kennen nur async_get_device
+        lookup = getattr(registry, "async_get_device_by_identifier", None)
+        if lookup is not None:
+            return lookup(ident, self.entry.entry_id)
+        return registry.async_get_device(identifiers={ident})
+
+    @callback
+    def _sync_shelf_devices(self) -> None:
+        """Ein Gerät je Regal, im zugeordneten Raum. Der Raum am Gerät ist maßgeblich:
+        Ändert man ihn in Home Assistant, übernimmt das Panel ihn."""
+        registry = dr.async_get(self.hass)
+        # Hauptgerät zuerst, damit die Regale darauf verweisen können (gleiche Angaben wie in entity.py)
+        main = registry.async_get_or_create(
+            config_entry_id=self.entry.entry_id,
+            identifiers={(DOMAIN, self.entry.entry_id)},
+            name="BGRegal",
+            manufacturer="BoardGameGeek",
+            model=self.entry.title,
+            entry_type=dr.DeviceEntryType.SERVICE,
+        )
+        wanted = {}
+        for shelf in self.snapshot.get("shelves", []):
+            ident = self.shelf_device_id(shelf["name"])
+            wanted[ident] = shelf
+            device = self.shelf_device(shelf["name"])
+            if device is None:
+                device = registry.async_get_or_create(
+                    config_entry_id=self.entry.entry_id,
+                    identifiers={ident},
+                    name=shelf["name"],
+                    manufacturer="BGRegal",
+                    model="Regal",
+                )
+                # via_device_id gibt es in async_update_device in alten und neuen HA-Versionen
+                registry.async_update_device(
+                    device.id, via_device_id=main.id, area_id=shelf["area_id"] or None
+                )
+            elif (device.area_id or "") != shelf["area_id"]:
+                # Raum wurde in Home Assistant am Gerät geändert -> übernehmen und speichern
+                shelf["area_id"] = device.area_id or ""
+                self.hass.async_add_executor_job(
+                    self.store.set_shelf, shelf["name"], None, shelf["area_id"]
+                )
+        for device in dr.async_entries_for_config_entry(registry, self.entry.entry_id):
+            idents = {i for i in device.identifiers if i[0] == DOMAIN and "_shelf_" in i[1]}
+            if idents and not idents & wanted.keys():
+                registry.async_remove_device(device.id)
+
+    async def async_set_shelf(
+        self,
+        name: str,
+        new_name: str | None = None,
+        area_id: str | None = None,
+        layout: str | None = None,
+        compartments: int | None = None,
+    ) -> None:
+        shelf = next((s for s in self.snapshot.get("shelves", []) if s["name"].lower() == name.lower()), None)
+        name = shelf["name"] if shelf else name.strip()
+        if not name:
+            raise ServiceValidationError("Name des Regals fehlt")
+        if area_id and ar.async_get(self.hass).async_get_area(area_id) is None:
+            raise ServiceValidationError(f"Den Bereich „{area_id}“ gibt es nicht")
+        if new_name is not None and not new_name.strip():
+            raise ServiceValidationError("Der neue Name darf nicht leer sein")
+        await self._run(self.store.set_shelf, name, new_name, area_id, layout, compartments)
+        if area_id is not None:
+            device = self.shelf_device(new_name or name)
+            if device is not None:
+                dr.async_get(self.hass).async_update_device(device.id, area_id=area_id or None)
+        await self.async_refresh()
+
+    async def async_remove_shelf(self, name: str) -> None:
+        if not await self._run(self.store.remove_shelf, name):
+            raise ServiceValidationError(f"„{name}“ ist nicht leer oder gibt es nicht")
+        await self.async_refresh()
 
     def public_state(self) -> dict[str, Any]:
         """Alles, was das Panel braucht."""
@@ -186,13 +275,21 @@ class BgRegal:
                 raise ServiceValidationError(f"Ungültiger Spotify-Link: {err}") from err
         if not valid_light_profile(clean.get("light_profile", "")):
             raise ServiceValidationError("Lichtprofil muss eine scene.* oder script.* Entität sein")
-        tag = clean.get("nfc_tag")
-        if tag:
-            other = await self._run(self.store.game_by_tag, tag)
-            if other is not None and other != game["bgg_id"]:
-                raise ServiceValidationError(
-                    f"Der Tag gehört schon zu „{self.find_game(other)['name']}“"
-                )
+        if "ean" in fields:
+            ean = normalize_ean(fields["ean"] or "")
+            if ean is None:
+                raise ServiceValidationError("Die EAN muss 8, 12, 13 oder 14 Ziffern haben")
+            clean["ean"] = ean
+        for key, lookup, label in (
+            ("nfc_tag", self.store.game_by_tag, "Der Tag"),
+            ("ean", self.store.game_by_ean, "Die EAN"),
+        ):
+            if clean.get(key):
+                other = await self._run(lookup, clean[key])
+                if other is not None and other != game["bgg_id"]:
+                    raise ServiceValidationError(
+                        f"{label} gehört schon zu „{self.find_game(other)['name']}“"
+                    )
         await self._run(self.store.set_game_meta, game["bgg_id"], clean)
         await self.async_refresh()
 
@@ -219,20 +316,38 @@ class BgRegal:
         bgg_id = await self._run(self.store.game_by_tag, tag_id)
         if bgg_id is None:
             return
-        game = self.find_game(bgg_id)
-        current = self.snapshot.get("session")
         try:
-            if current and current["state"] == sess.RUNNING:
-                if current["bgg_id"] == bgg_id:
-                    await self.async_end_session()
-                else:
-                    _LOGGER.warning(
-                        "Tag von „%s“ gescannt, aber „%s“ läuft noch", game["name"], current["name"]
-                    )
-            else:
-                await self.async_start_session(game)
+            await self._toggle_session(self.find_game(bgg_id))
         except HomeAssistantError as err:
             _LOGGER.warning("NFC-Aktion fehlgeschlagen: %s", err)
+
+    async def _toggle_session(self, game: dict[str, Any]) -> str:
+        """Wie ein Scan: erster startet die Sitzung, zweiter beendet sie. Liefert, was passiert ist."""
+        current = self.snapshot.get("session")
+        if current and current["state"] == sess.RUNNING:
+            if current["bgg_id"] == game["bgg_id"]:
+                await self.async_end_session()
+                return "ended"
+            _LOGGER.warning("„%s“ gescannt, aber „%s“ läuft noch", game["name"], current["name"])
+            return "busy"
+        await self.async_start_session(game)
+        return "started"
+
+    async def async_scan_code(self, code: str) -> dict[str, Any]:
+        """EAN-Barcode (oder Tag-ID) gescannt: Sitzung starten/beenden oder unbekannten Code melden."""
+        raw = code.strip()
+        ean = normalize_ean(raw)
+        bgg_id = await self._run(self.store.game_by_ean, ean) if ean else None
+        if bgg_id is None:
+            bgg_id = await self._run(self.store.game_by_tag, raw)
+        if bgg_id is None:
+            self.hass.bus.async_fire(EVENT_UNKNOWN_CODE, {"code": ean or raw})
+            return {"result": "unknown", "code": ean or raw}
+        game = self.find_game(bgg_id)
+        result = await self._toggle_session(game)
+        current = self.snapshot.get("session")
+        return {"result": result, "code": ean or raw, "bgg_id": bgg_id, "name": game["name"],
+                "running": current["name"] if result == "busy" and current else None}
 
     # ---- Sitzung -------------------------------------------------------------
     async def _save_session(self, data: dict[str, Any] | None) -> None:

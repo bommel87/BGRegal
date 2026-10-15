@@ -37,8 +37,8 @@ und Spieleabende.
 
 | Bereich | Inhalt |
 | --- | --- |
-| **Regal** | Spiele nach Regal und Fach, Suche, Filter. Jede Schachtel zeigt Partienzahl und letzte Partie. |
-| **Spiel-Fenster** | Infos, letzte Partien, Erweiterungen; Standort, NFC-Tag, Licht, Sound, Anleitung; verleihen; Sitzung starten |
+| **Regal** | Übersicht aller Regale nach Raum; ein Regal zeigt die Kartons von der Seite (stehend oder liegend). Suche und Filter über alle Regale. |
+| **Spiel-Fenster** | Infos, letzte Partien, Erweiterungen; Standort, NFC-Tag, EAN, Licht, Sound, Anleitung; verleihen; Sitzung starten |
 | **Sitzung** | Laufzeit, Runde, wer am Zug ist; danach Mitspieler, Punkte, Gewinner und QR-Code für BG Stats |
 | **Vorschlag** | Filter nach Spielerzahl, Modus, Typ, Dauer und Anwesenden; Ja/Nein; Standort |
 | **Spieleabende** | Termin, Gäste, Spiele zur Wahl, Abstimm-Link und QR-Code, Rangliste |
@@ -48,10 +48,21 @@ und Spieleabende.
 | **Wunschliste** | Wunschliste von BGG und neue Erweiterungen zu deinen Spielen |
 | **Verliehen** | was an wen seit wann verliehen ist |
 
-### Standort
+### Regale und Räume
 
 Regal und Fach trägst du im Spiel-Fenster ein. Fach 1 ist das oberste. Eine Erweiterung kann „im Basisspiel“ liegen;
 dann steht sie nicht extra im Regal, sondern zählt beim Basisspiel mit.
+
+Die Übersicht zeigt alle Regale nach Raum gruppiert. Unter **Regal einstellen** legst du fest:
+
+- **Raum:** ein Bereich aus Home Assistant. Jedes Regal ist ein eigenes Gerät in diesem Raum, mit einem Sensor für die
+  Zahl der Spiele. Änderst du den Raum am Gerät in Home Assistant, übernimmt BGRegal ihn.
+- **Darstellung:** stehend (Kartonrücken nebeneinander) oder liegend (gestapelt).
+- **Fächer:** wie viele Fächer das Regal hat, auch leere.
+- **Name:** Umbenennen ändert den Standort aller Spiele darin.
+
+Die Kartons zeigt BGRegal von der Seite: Dicke und Höhe aus den Kartonmaßen deiner Ausgabe auf BGG (sonst
+Standardmaße), Farbe aus dem Cover. Ein gelber Punkt heißt verliehen, ein weißer nie gespielt.
 
 ### NFC
 
@@ -60,6 +71,19 @@ drücken (gilt für den Tag der letzten 10 Minuten). Danach gilt:
 
 - **Scan** startet die Sitzung: Lichtprofil (Szene oder Skript) und Playlist laufen an.
 - **Zweiter Scan** desselben Tags beendet sie: Musik pausiert, die Szene für Sitzungsende läuft.
+
+### EAN-Barcode
+
+Statt eines NFC-Tags (oder zusätzlich) kannst du den Barcode auf der Schachtel nutzen. Oben im Panel öffnet das
+Barcode-Symbol den Scanner:
+
+- **Kamera:** funktioniert in Chrome auf Android und am Rechner mit Kamera. Safari auf dem iPhone kann keine Barcodes
+  lesen.
+- **Barcode-Scanner (USB/Bluetooth):** scannt wie eine Tastatur in das Feld „Code“.
+
+Ein bekannter Code startet oder beendet die Sitzung wie ein NFC-Tag. Bei einem unbekannten Code fragt BGRegal, zu
+welchem Spiel er gehört, und merkt ihn sich. Im Spiel-Fenster kannst du die EAN auch eintragen oder per Kamera
+übernehmen. Für eigene Scanner gibt es den Dienst `bgregal.scan_code`.
 
 ### Spieleabend und Abstimmung
 
@@ -90,10 +114,12 @@ Die Kachel zeigt Cover, Partienzahl, letzte Partie und Standort, dazu einen Star
 | `sensor.bgregal_verliehen` | Anzahl | Liste mit Person und Tagen |
 | `sensor.bgregal_neuheiten` | Anzahl neuer Erweiterungen | Liste |
 | `sensor.bgregal_letzter_sync` | Zeitpunkt | letzter Fehler |
+| `sensor.bgregal_regal_<name>` | Spiele im Regal | Fächer, Darstellung, Spiele; Gerät im Raum des Regals |
 | `calendar.bgregal_spieleabende` | nächster Abend | Gäste |
 | `button.bgregal_sync` | – | – |
 
-Events: `bgregal_session_started`, `bgregal_session_ended`, `bgregal_loan_overdue`, `bgregal_new_expansion`.
+Events: `bgregal_session_started`, `bgregal_session_ended`, `bgregal_loan_overdue`, `bgregal_new_expansion`,
+`bgregal_unknown_code`.
 
 ## Dienste
 
@@ -102,7 +128,9 @@ Alle Dienste liegen unter `bgregal.*`; ein Spiel gibst du mit `bgg_id` oder `nam
 | Dienst | Zweck |
 | --- | --- |
 | `sync_now` | sofort synchronisieren |
-| `set_game` | `shelf`, `compartment`, `in_base`, `nfc_tag`, `light_profile`, `playlist`, `manual_url`; leer = löschen |
+| `set_game` | `shelf`, `compartment`, `in_base`, `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`; leer = löschen |
+| `scan_code` | gescannter Barcode oder Tag: Sitzung starten/beenden, sonst `unknown` |
+| `set_shelf` / `remove_shelf` | Regal: `area_id`, `layout` (`upright`/`stacked`), `compartments`, `new_name` |
 | `assign_scanned_tag` | zuletzt gescannten Tag zuordnen |
 | `lend_game` / `return_game` | verleihen (`borrower`) / zurück |
 | `start_session` / `end_session` / `cancel_session` | Sitzung; ohne Spiel startet der angenommene Vorschlag |

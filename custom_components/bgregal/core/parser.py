@@ -46,6 +46,10 @@ class CollectionItem:
     user_rating: float | None = None
     version_name: str | None = None
     languages: list[str] = field(default_factory=list)
+    # Kartonmaße der Ausgabe in Zoll (BGG), falls hinterlegt
+    box_width: float | None = None
+    box_length: float | None = None
+    box_depth: float | None = None
 
 
 @dataclass
@@ -148,7 +152,12 @@ def parse_collection(text: str) -> list[CollectionItem]:
         version = el.find("version/item")
         version_name = None
         languages: list[str] = []
+        dims: dict[str, float | None] = {}
         if version is not None:
+            for dim in ("width", "length", "depth"):
+                child = version.find(dim)
+                # BGG schreibt bei fehlenden Maßen 0
+                dims[dim] = (_float(child.get("value")) or None) if child is not None else None
             name_el = version.find("name")
             version_name = name_el.get("value") if name_el is not None else None
             languages = [
@@ -170,6 +179,9 @@ def parse_collection(text: str) -> list[CollectionItem]:
                 user_rating=_float(rating.get("value")) if rating is not None else None,
                 version_name=version_name,
                 languages=languages,
+                box_width=dims.get("width"),
+                box_length=dims.get("length"),
+                box_depth=dims.get("depth"),
             )
         )
     return items

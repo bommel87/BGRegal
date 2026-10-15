@@ -12,6 +12,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .core.store import LAYOUTS
 from .core.suggest import DISLIKE_OPTIONS, GAME_TYPES, MODES
 from .runtime import BgRegal
 
@@ -32,8 +33,20 @@ SCHEMAS: dict[str, vol.Schema] = {
             vol.Optional("light_profile"): vol.Any(None, cv.string),
             vol.Optional("playlist"): vol.Any(None, cv.string),
             vol.Optional("manual_url"): vol.Any(None, cv.string),
+            vol.Optional("ean"): vol.Any(None, vol.Coerce(str)),
         }
     ),
+    "scan_code": vol.Schema({vol.Required("code"): vol.Coerce(str)}),
+    "set_shelf": vol.Schema(
+        {
+            vol.Required("name"): cv.string,
+            vol.Optional("new_name"): cv.string,
+            vol.Optional("area_id"): vol.Any(None, cv.string),
+            vol.Optional("layout"): vol.In(LAYOUTS),
+            vol.Optional("compartments"): vol.All(vol.Coerce(int), vol.Range(min=0, max=50)),
+        }
+    ),
+    "remove_shelf": vol.Schema({vol.Required("name"): cv.string}),
     "assign_scanned_tag": vol.Schema(GAME),
     "lend_game": vol.Schema({**GAME, vol.Required("borrower"): cv.string}),
     "return_game": vol.Schema(GAME),
@@ -106,6 +119,7 @@ SCHEMAS: dict[str, vol.Schema] = {
 
 RESPONSES = {
     "assign_scanned_tag": SupportsResponse.OPTIONAL,
+    "scan_code": SupportsResponse.OPTIONAL,
     "finish_session": SupportsResponse.OPTIONAL,
     "session_qr": SupportsResponse.ONLY,
     "suggest": SupportsResponse.OPTIONAL,
@@ -138,6 +152,15 @@ async def _handle(regal: BgRegal, service: str, d: dict[str, Any]) -> dict[str, 
         case "set_game":
             fields = {k: v for k, v in d.items() if k not in ("bgg_id", "name")}
             await regal.async_set_game(_game(regal, d), fields)
+        case "scan_code":
+            return await regal.async_scan_code(d["code"])
+        case "set_shelf":
+            await regal.async_set_shelf(
+                d["name"], d.get("new_name"), d.get("area_id") if "area_id" in d else None,
+                d.get("layout"), d.get("compartments"),
+            )
+        case "remove_shelf":
+            await regal.async_remove_shelf(d["name"])
         case "assign_scanned_tag":
             return {"nfc_tag": await regal.async_assign_scanned_tag(_game(regal, d))}
         case "lend_game":

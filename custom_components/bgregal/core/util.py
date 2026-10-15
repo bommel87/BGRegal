@@ -28,5 +28,16 @@ def playlist_media_type(uri: str) -> str:
     return parts[1] if len(parts) >= 3 else "playlist"
 
 
+def normalize_ean(value: str) -> str | None:
+    """EAN/UPC/GTIN: nur Ziffern (Leerzeichen und Striche entfernt). Leer = löschen ("").
+    None, wenn es keine gültige Länge (8, 12, 13, 14) hat."""
+    digits = re.sub(r"[\s-]", "", value or "")
+    if not digits:
+        return ""
+    if not digits.isdigit() or len(digits) not in (8, 12, 13, 14):
+        return None
+    return digits
+
+
 def valid_light_profile(value: str) -> bool:
     return not value or bool(_PROFILE.fullmatch(value))

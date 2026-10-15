@@ -45,6 +45,52 @@ set_game:
       selector:
         text:
           type: url
+    ean:
+      example: "4002051693602"
+      selector:
+        text:
+
+scan_code:
+  fields:
+    code:
+      required: true
+      example: "4002051693602"
+      selector:
+        text:
+
+set_shelf:
+  fields:
+    name:
+      required: true
+      example: Regal 1
+      selector:
+        text:
+    new_name:
+      selector:
+        text:
+    area_id:
+      selector:
+        area:
+    layout:
+      selector:
+        select:
+          translation_key: layout
+          options:
+            - upright
+            - stacked
+    compartments:
+      selector:
+        number:
+          min: 0
+          max: 50
+          mode: box
+
+remove_shelf:
+  fields:
+    name:
+      required: true
+      selector:
+        text:
 
 assign_scanned_tag:
   fields:

@@ -80,6 +80,10 @@
       },
       "last_sync": {
         "name": "Last sync"
+      },
+      "shelf": {
+        "name": "Games",
+        "unit_of_measurement": "games"
       }
     },
     "calendar": {
@@ -111,6 +115,12 @@
         "thematic": "Thematic",
         "wargame": "Wargame",
         "children": "Children"
+      }
+    },
+    "layout": {
+      "options": {
+        "upright": "Upright",
+        "stacked": "Stacked"
       }
     },
     "dislike": {
@@ -171,6 +181,56 @@
         "manual_url": {
           "name": "Manual",
           "description": "Link to the rules."
+        },
+        "ean": {
+          "name": "EAN",
+          "description": "Barcode on the box (8, 12, 13 or 14 digits)."
+        }
+      }
+    },
+    "scan_code": {
+      "name": "Scan code",
+      "description": "Barcode (EAN) or tag scanned: starts or ends the session like an NFC tag; unknown codes are reported.",
+      "fields": {
+        "code": {
+          "name": "Code",
+          "description": "Scanned EAN or tag ID."
+        }
+      }
+    },
+    "set_shelf": {
+      "name": "Set shelf",
+      "description": "Room, display, compartments or a new name for a shelf.",
+      "fields": {
+        "name": {
+          "name": "Shelf",
+          "description": "Current name of the shelf."
+        },
+        "new_name": {
+          "name": "New name",
+          "description": "Renames the shelf for all games in it."
+        },
+        "area_id": {
+          "name": "Room",
+          "description": "Home Assistant area of the shelf (empty = none)."
+        },
+        "layout": {
+          "name": "Display",
+          "description": "Boxes standing upright or lying stacked."
+        },
+        "compartments": {
+          "name": "Compartments",
+          "description": "Number of compartments shown (0 = as used)."
+        }
+      }
+    },
+    "remove_shelf": {
+      "name": "Remove shelf",
+      "description": "Removes an empty shelf.",
+      "fields": {
+        "name": {
+          "name": "Shelf",
+          "description": "Name of the shelf."
         }
       }
     },

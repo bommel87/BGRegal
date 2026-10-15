@@ -21,6 +21,7 @@ UNITS = {
     "plays": ("plays", "Partien"),
     "loans": ("games", "Spiele"),
     "new_expansions": ("expansions", "Erweiterungen"),
+    "shelf": ("games", "Spiele"),
 }
 
 SERVICES = {
@@ -36,7 +37,21 @@ SERVICES = {
         "light_profile": ("Light profile", "Scene or script for the game.", "Lichtprofil", "Szene oder Skript für das Spiel."),
         "playlist": ("Sound profile", "Spotify playlist link or URI.", "Soundprofil", "Spotify-Playlist als Link oder URI."),
         "manual_url": ("Manual", "Link to the rules.", "Anleitung", "Link zur Spielanleitung."),
+        "ean": ("EAN", "Barcode on the box (8, 12, 13 or 14 digits).", "EAN", "Barcode auf der Schachtel (8, 12, 13 oder 14 Ziffern)."),
     }),
+    "scan_code": ("Scan code", "Barcode (EAN) or tag scanned: starts or ends the session like an NFC tag; unknown codes are reported.",
+                  "Code gescannt", "Barcode (EAN) oder Tag gescannt: startet oder beendet die Sitzung wie ein NFC-Tag; unbekannte Codes werden gemeldet.", {
+        "code": ("Code", "Scanned EAN or tag ID.", "Code", "Gescannte EAN oder Tag-ID.")}),
+    "set_shelf": ("Set shelf", "Room, display, compartments or a new name for a shelf.",
+                  "Regal einstellen", "Raum, Darstellung, Fächer oder neuer Name eines Regals.", {
+        "name": ("Shelf", "Current name of the shelf.", "Regal", "Bisheriger Name des Regals."),
+        "new_name": ("New name", "Renames the shelf for all games in it.", "Neuer Name", "Benennt das Regal bei allen Spielen darin um."),
+        "area_id": ("Room", "Home Assistant area of the shelf (empty = none).", "Raum", "Bereich des Regals in Home Assistant (leer = keiner)."),
+        "layout": ("Display", "Boxes standing upright or lying stacked.", "Darstellung", "Kartons stehend oder liegend gestapelt."),
+        "compartments": ("Compartments", "Number of compartments shown (0 = as used).", "Fächer", "Anzahl der angezeigten Fächer (0 = wie belegt)."),
+    }),
+    "remove_shelf": ("Remove shelf", "Removes an empty shelf.", "Regal entfernen", "Entfernt ein leeres Regal.", {
+        "name": ("Shelf", "Name of the shelf.", "Regal", "Name des Regals.")}),
     "assign_scanned_tag": ("Assign scanned tag", "Assign the tag scanned in the last 10 minutes.",
                            "Gescannten Tag zuordnen", "Ordnet den in den letzten 10 Minuten gescannten Tag zu.", GAME_FIELDS),
     "lend_game": ("Lend game", "Mark a game as lent.", "Spiel verleihen", "Markiert ein Spiel als verliehen.", {
@@ -108,6 +123,7 @@ ENTITIES = {
         "loans": ("Lent out", "Verliehen"),
         "new_expansions": ("New expansions", "Neuheiten"),
         "last_sync": ("Last sync", "Letzter Sync"),
+        "shelf": ("Games", "Spiele"),
     },
     "calendar": {"evenings": ("Game nights", "Spieleabende")},
     "button": {"sync": ("Sync now", "Jetzt synchronisieren")},
@@ -125,6 +141,7 @@ SELECTORS = {
                   "party": ("Party", "Party"), "abstract": ("Abstract", "Abstrakt"), "thematic": ("Thematic", "Thematisch"),
                   "wargame": ("Wargame", "Kriegsspiel"), "children": ("Children", "Kinder")},
 }
+SELECTORS["layout"] = {"upright": ("Upright", "Stehend"), "stacked": ("Stacked", "Liegend")}
 SELECTORS["dislike"] = {k: v for k, v in {**SELECTORS["mode"], **SELECTORS["game_type"]}.items() if k != "any"}
 
 CONFIG = {

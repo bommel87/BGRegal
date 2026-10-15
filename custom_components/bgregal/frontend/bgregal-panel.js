@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.1.2";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.2.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -15,7 +15,7 @@ class BgRegalPanel extends HTMLElement {
     this._data = null;
     this._error = null;
     this._ui = {
-      search: "", filter: "all", game: null, gamePlays: null, edit: {}, lendTo: "",
+      search: "", filter: "all", shelf: null, shelfEdit: null, game: null, gamePlays: null, edit: {}, lendTo: "",
       sug: { players: "", mode: "any", game_type: "any", max_playtime: "", attendees: [] },
       finish: null, qr: null, evening: null, eveningQr: null, newPlayer: "", playerEdit: {},
       order: null,
@@ -37,6 +37,7 @@ class BgRegalPanel extends HTMLElement {
 
   disconnectedCallback() {
     clearInterval(this._timer);
+    if (this._scan) this._closeScan();
     if (this._unsub) this._unsub.then((u) => u()).catch(() => {});
     this._unsub = null;
   }
@@ -119,17 +120,23 @@ class BgRegalPanel extends HTMLElement {
       if (tab === "wishlist" && this._data?.new_expansions.length) return `<span class="count">${this._data.new_expansions.length}</span>`;
       return "";
     };
-    this.shadowRoot.innerHTML = `
-      <style>${CSS}</style>
+    // Der Scanner (Kamera) liegt außerhalb von #app, damit Neuzeichnen das Video nicht abbricht
+    if (!this._app) {
+      this.shadowRoot.innerHTML = `<style>${CSS}</style><div id="app"></div><div id="scan"></div>`;
+      this._app = this.shadowRoot.getElementById("app");
+    }
+    this._app.innerHTML = `
       <header>
         ${this._narrow ? `<button class="icon menu" data-a="menu" aria-label="Menu">☰</button>` : ""}
         <h1>BGRegal</h1>
         <span class="sync muted">${this._data?.last_sync ? `${t.lastSync} ${fmtDate(this._data.last_sync, true)}` : ""}</span>
+        <button class="icon" data-a="scan" title="${t.scan}" aria-label="${t.scan}">${BARCODE_ICON}</button>
         <button class="icon" data-a="sync" title="${t.syncNow}" aria-label="${t.syncNow}">⟳</button>
       </header>
       <nav>${TABS.map((tab) => `<button class="tab ${tab === this._tab ? "on" : ""}" data-a="tab" data-v="${tab}">${t.tabs[tab]}${badge(tab)}</button>`).join("")}</nav>
       <main>${body}</main>
       ${this._ui.game ? this._gameDialog() : ""}
+      ${this._ui.shelfEdit ? this._shelfDialog() : ""}
       ${this._ui.qr ? this._qrDialog() : ""}
       ${this._toast ? `<div class="toast">${esc(this._toast)}</div>` : ""}`;
 
@@ -138,7 +145,18 @@ class BgRegalPanel extends HTMLElement {
       this.shadowRoot.addEventListener("input", (e) => this._onInput(e));
       this.shadowRoot.addEventListener("change", (e) => this._onInput(e));
       this.shadowRoot.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && (this._ui.game || this._ui.qr)) { this._ui.game = null; this._ui.qr = null; this._render(); }
+        if (e.key === "Enter" && e.target.dataset?.k === "scan.code") {
+          // Barcode-Scanner tippen den Code und drücken Enter
+          const code = e.target.value;
+          e.target.value = "";
+          this._onCode(code);
+          return;
+        }
+        if (e.key !== "Escape") return;
+        if (this._scan) { this._closeScan(); return; }
+        if (this._ui.game || this._ui.qr || this._ui.shelfEdit) {
+          this._ui.game = null; this._ui.qr = null; this._ui.shelfEdit = null; this._render();
+        }
       });
       this._bound = true;
     }
@@ -166,52 +184,147 @@ class BgRegalPanel extends HTMLElement {
         ${g.expansion ? `<span class="tag">${t.expansion}</span>` : ""}
         ${exps ? `<span class="tag">+${exps} ${t.exp}</span>` : ""}
         ${g.nfc_tag ? `<span class="tag" title="NFC">NFC</span>` : ""}
+        ${g.ean ? `<span class="tag" title="EAN ${esc(g.ean)}">EAN</span>` : ""}
       </div>${extra}</button>`;
   }
 
-  // Regal: Spiele nach Regal und Fach (Erweiterungen im Basisspiel stehen nicht extra)
+  // ---- Regal ------------------------------------------------------------------
+  /** Spiele, die im Regal sichtbar stehen (Erweiterungen im Basisspiel zählen nicht extra). */
+  _shelfGames() {
+    return this._data.games.filter((g) => !(g.expansion && g.in_base));
+  }
+
+  _areaName(areaId) {
+    return (areaId && this._hass.areas?.[areaId]?.name) || "";
+  }
+
   _view_shelf() {
     const t = this._t, ui = this._ui;
     const q = ui.search.trim().toLowerCase();
-    let games = this._data.games.filter((g) => !(g.expansion && g.in_base));
-    if (ui.filter === "lent") games = games.filter((g) => g.loan);
-    if (ui.filter === "nolocation") games = games.filter((g) => !g.shelf && !g.compartment);
-    if (ui.filter === "expansions") games = games.filter((g) => g.expansion);
-    if (q) games = games.filter((g) => g.name.toLowerCase().includes(q));
-
-    const shelves = new Map();
-    const unplaced = [];
-    for (const g of games) {
-      if (!g.shelf && !g.compartment) { unplaced.push(g); continue; }
-      const name = g.shelf || t.shelf;
-      if (!shelves.has(name)) shelves.set(name, new Map());
-      const key = g.compartment || 0;
-      const fach = shelves.get(name);
-      if (!fach.has(key)) fach.set(key, []);
-      fach.get(key).push(g);
-    }
     const filters = ["all", "lent", "nolocation", "expansions"].map((f) =>
       `<button class="chip ${ui.filter === f ? "on" : ""}" data-a="filter" data-v="${f}">${t.filters[f]}</button>`).join("");
-    const shelfHtml = [...shelves.keys()].sort(naturalCompare).map((name) => {
-      const fach = shelves.get(name);
-      const max = Math.max(0, ...fach.keys());
-      const rows = [];
-      for (let n = 1; n <= max; n++) {
-        const list = fach.get(n) || [];
-        rows.push(`<div class="fach"><div class="fnum">${t.compartment} ${n}</div><div class="boxes">${list.map((g) => this._tile(g)).join("") || `<span class="muted small">${t.emptyCompartment}</span>`}</div></div>`);
-      }
-      if (fach.has(0)) rows.push(`<div class="fach"><div class="fnum">${t.noCompartment}</div><div class="boxes">${fach.get(0).map((g) => this._tile(g)).join("")}</div></div>`);
-      return `<section class="billy"><h2>${esc(name)}</h2>${rows.join("")}</section>`;
-    }).join("");
-    const unplacedHtml = unplaced.length
-      ? `<section class="billy loose"><h2>${t.noLocation}</h2><div class="boxes">${unplaced.map((g) => this._tile(g)).join("")}</div></section>` : "";
-    return `
-      <div class="toolbar">
+    const toolbar = `<div class="toolbar">
         <input type="search" placeholder="${t.search}" value="${esc(ui.search)}" data-k="search">
         <div class="chips">${filters}</div>
+      </div>`;
+    if (!this._data.games.length) return toolbar + `<div class="empty">${t.noGames}</div>`;
+
+    // Suche oder Filter: Trefferliste über alle Regale
+    if (q || ui.filter !== "all") {
+      let games = this._shelfGames();
+      if (ui.filter === "lent") games = games.filter((g) => g.loan);
+      if (ui.filter === "nolocation") games = games.filter((g) => !g.shelf);
+      if (ui.filter === "expansions") games = games.filter((g) => g.expansion);
+      if (q) games = games.filter((g) => g.name.toLowerCase().includes(q));
+      return toolbar + (games.length
+        ? `<div class="boxes">${games.map((g) => this._tile(g, g.shelf ? `<div class="tfacts">${esc(location(g, t))}</div>` : "")).join("")}</div>`
+        : `<div class="empty">${t.noMatch}</div>`);
+    }
+    if (ui.shelf !== null) return toolbar + this._shelfDetail(ui.shelf);
+    return toolbar + this._shelfOverview();
+  }
+
+  /** Übersicht: alle Regale nach Raum gruppiert, je Regal eine Vorschau der Kartonrücken. */
+  _shelfOverview() {
+    const t = this._t;
+    const games = this._shelfGames();
+    const rooms = new Map();
+    for (const shelf of this._data.shelves) {
+      const room = this._areaName(shelf.area_id);
+      if (!rooms.has(room)) rooms.set(room, []);
+      rooms.get(room).push(shelf);
+    }
+    // Räume alphabetisch, Regale ohne Raum zuletzt
+    const roomNames = [...rooms.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || naturalCompare(a, b));
+    const card = (shelf) => {
+      const inShelf = games.filter((g) => g.shelf.toLowerCase() === shelf.name.toLowerCase());
+      const preview = inShelf.slice(0, 28)
+        .map((g) => `<span style="background:${boxColor(g)};height:${spineHeightPreview(g)}px"></span>`).join("");
+      return `<button class="shelfcard" data-a="openshelf" data-v="${esc(shelf.name)}">
+        <div class="preview">${preview || `<span class="muted small">${t.emptyShelf}</span>`}</div>
+        <div class="sname">${esc(shelf.name)}</div>
+        <div class="muted small">${shelf.games} ${shelf.games === 1 ? t.game : t.gamesWord} · ${shelf.compartments} ${t.compartments}</div>
+      </button>`;
+    };
+    const unplaced = games.filter((g) => !g.shelf).length;
+    return roomNames.map((room) => `<section class="room"><h2>${esc(room || t.noRoom)}</h2>
+        <div class="shelfgrid">${rooms.get(room).map(card).join("")}</div></section>`).join("")
+      + `<section class="room"><div class="shelfgrid">
+        ${unplaced ? `<button class="shelfcard loose" data-a="openshelf" data-v=""><div class="sname">${t.noLocation}</div>
+          <div class="muted small">${unplaced} ${unplaced === 1 ? t.game : t.gamesWord}</div></button>` : ""}
+        <button class="shelfcard add" data-a="newshelf"><div class="sname">+ ${t.newShelf}</div></button></div></section>`;
+  }
+
+  /** Ein Regal von vorn: Fächer mit den Kartons in Seitenansicht. Leerer Name = ohne Standort. */
+  _shelfDetail(name) {
+    const t = this._t;
+    const games = this._shelfGames();
+    const back = `<button class="link" data-a="closeshelf">← ${t.allShelves}</button>`;
+    if (!name) {
+      const loose = games.filter((g) => !g.shelf);
+      return `${back}<section class="billy"><h2>${t.noLocation}</h2><p class="muted small">${t.noLocationHint}</p>
+        <div class="boxes">${loose.map((g) => this._tile(g)).join("")}</div></section>`;
+    }
+    const shelf = this._data.shelves.find((s) => s.name.toLowerCase() === name.toLowerCase());
+    // Nach dem Umbenennen kennt das Panel den neuen Namen erst mit dem nächsten Datenstand
+    if (!shelf) return `${back}<div class="empty">${t.loading}</div>`;
+    const inShelf = games.filter((g) => g.shelf.toLowerCase() === shelf.name.toLowerCase());
+    const stacked = shelf.layout === "stacked";
+    const rows = [];
+    for (let n = 1; n <= shelf.compartments; n++) {
+      rows.push(this._compartment(`${t.compartment} ${n}`, inShelf.filter((g) => g.compartment === n), stacked));
+    }
+    const loose = inShelf.filter((g) => !g.compartment);
+    if (loose.length) rows.push(this._compartment(t.noCompartment, loose, stacked));
+    const room = this._areaName(shelf.area_id);
+    return `${back}<section class="billy">
+      <div class="shead"><h2>${esc(shelf.name)}</h2><span class="muted">${esc(room || t.noRoom)}</span>
+        <button class="link" data-a="editshelf" data-v="${esc(shelf.name)}">${t.shelfSettings}</button></div>
+      <div class="frame">${rows.join("")}</div></section>`;
+  }
+
+  _compartment(label, list, stacked) {
+    const t = this._t;
+    const boxes = list.map((g) => this._spine(g, stacked)).join("");
+    return `<div class="fach ${stacked ? "stacked" : "upright"}"><div class="fnum">${esc(label)}</div>
+      <div class="spines">${boxes || `<span class="muted small">${t.emptyCompartment}</span>`}</div></div>`;
+  }
+
+  /** Kartonrücken: Dicke aus den BGG-Maßen (Zoll), Farbe aus dem Cover. */
+  _spine(g, stacked) {
+    const t = this._t;
+    const depth = g.box_depth || DEFAULT_DEPTH;
+    const face = Math.max(g.box_width || 0, g.box_length || 0) || DEFAULT_FACE;
+    const color = boxColor(g);
+    const ink = readableOn(color);
+    const thick = clamp(Math.round(depth * (stacked ? 9 : 13)), stacked ? 16 : 22, stacked ? 44 : 64);
+    const long = clamp(Math.round(face * (stacked ? 17 : 14)), stacked ? 120 : 110, stacked ? 230 : 190);
+    const size = stacked ? `height:${thick}px;width:${long}px` : `width:${thick}px;height:${long}px`;
+    const marks = `${g.loan ? `<i class="mark lent" title="${t.lentTo} ${esc(g.loan.borrower)}"></i>` : ""}${g.plays ? "" : `<i class="mark shame" title="${t.neverPlayed}"></i>`}`;
+    return `<button class="spine" style="${size};background:${color};color:${ink}" data-a="open" data-v="${g.bgg_id}"
+      title="${esc(g.name)} · ${g.plays ? `${g.plays}×` : t.neverPlayed}"><span>${esc(g.name)}</span>${marks}</button>`;
+  }
+
+  _shelfDialog() {
+    const t = this._t, e = this._ui.shelfEdit;
+    const areas = Object.values(this._hass.areas || {}).sort((a, b) => naturalCompare(a.name, b.name));
+    const empty = e.original && !this._shelfGames().some((g) => g.shelf.toLowerCase() === e.original.toLowerCase());
+    return `<div class="overlay" data-a="closeshelfedit"><div class="dialog small-dialog" role="dialog" aria-modal="true" data-stop="1">
+      <button class="icon close" data-a="closeshelfedit" aria-label="${t.close}">✕</button>
+      <h2>${e.original ? esc(e.original) : t.newShelf}</h2>
+      <div class="form">
+        <label>${t.name}<input value="${esc(e.name)}" data-k="sh.name"></label>
+        <label>${t.room}<select data-k="sh.area_id"><option value="">${t.noRoom}</option>${areas.map((a) =>
+          `<option value="${esc(a.area_id)}" ${a.area_id === e.area_id ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></label>
+        <label>${t.layout}<select data-k="sh.layout">
+          <option value="upright" ${e.layout === "upright" ? "selected" : ""}>${t.upright}</option>
+          <option value="stacked" ${e.layout === "stacked" ? "selected" : ""}>${t.stacked}</option></select></label>
+        <label>${t.compartments}<input type="number" min="1" max="50" value="${esc(e.compartments)}" data-k="sh.compartments"></label>
       </div>
-      ${shelfHtml}${unplacedHtml}
-      ${!games.length ? `<div class="empty">${this._data.games.length ? t.noMatch : t.noGames}</div>` : ""}`;
+      <p class="muted small">${t.shelfHint}</p>
+      <div class="row"><button class="primary" data-a="saveshelf" ${e.name.trim() ? "" : "disabled"}>${t.save}</button>
+        ${empty ? `<button class="danger" data-a="removeshelf" data-v="${esc(e.original)}">${t.delete}</button>` : ""}</div>
+    </div></div>`;
   }
 
   _gameDialog() {
@@ -222,7 +335,7 @@ class BgRegalPanel extends HTMLElement {
     const session = this._data.session;
     const expansions = this._data.games.filter((x) => x.expansion && x.base_ids.includes(g.bgg_id));
     const bases = g.base_ids.map((id) => this._games.get(id)).filter(Boolean);
-    const shelves = [...new Set(this._data.games.map((x) => x.shelf).filter(Boolean))].sort(naturalCompare);
+    const shelves = this._data.shelves.map((s) => s.name);
     const profiles = Object.keys(this._hass.states).filter((id) => id.startsWith("scene.") || id.startsWith("script.")).sort();
     const facts = [];
     if (g.min_players && g.max_players) facts.push(g.min_players === g.max_players ? `${g.min_players} ${t.players}` : `${g.min_players}–${g.max_players} ${t.players}`);
@@ -268,6 +381,7 @@ class BgRegalPanel extends HTMLElement {
         <label>${t.compartment}<input type="number" min="0" max="50" value="${esc(e.compartment)}" data-k="edit.compartment"></label>
         ${g.expansion ? `<label class="check"><input type="checkbox" ${e.in_base ? "checked" : ""} data-k="edit.in_base">${t.inBase}</label>` : ""}
         <label>${t.nfc}<span class="row"><input value="${esc(e.nfc_tag)}" data-k="edit.nfc_tag"><button data-a="scanned" data-v="${g.bgg_id}">${t.takeScanned}</button></span></label>
+        <label>${t.ean}<span class="row"><input inputmode="numeric" placeholder="4002051693602" value="${esc(e.ean)}" data-k="edit.ean"><button data-a="scanean" title="${t.scanEan}">${BARCODE_ICON}</button></span></label>
         <label>${t.light}<select data-k="edit.light_profile"><option value="">–</option>${profiles.map((p) => `<option value="${esc(p)}" ${p === e.light_profile ? "selected" : ""}>${esc(this._hass.states[p].attributes.friendly_name || p)}</option>`).join("")}</select></label>
         <label>${t.sound}<input placeholder="https://open.spotify.com/playlist/…" value="${esc(e.playlist)}" data-k="edit.playlist"></label>
         <label>${t.manual}<input type="url" placeholder="https://…" value="${esc(e.manual_url)}" data-k="edit.manual_url"></label>
@@ -517,6 +631,13 @@ class BgRegalPanel extends HTMLElement {
     if (k === "lendTo") { ui.lendTo = v; this._render(); return; }
     if (k === "newPlayer") { ui.newPlayer = v; this._render(); return; }
     if (head === "edit") { ui.edit[rest[0]] = v; return; }
+    if (head === "sh") { ui.shelfEdit[rest[0]] = v; if (rest[0] === "name") this._render(); return; }
+    if (k === "scan.assign" && this._scan) {
+      this._scan.assign = v;
+      const btn = this.shadowRoot.querySelector('[data-a="scanassign"]');
+      if (btn) btn.disabled = !v.trim();
+      return;
+    }
     if (head === "sug") { ui.sug[rest[0]] = v; return; }
     if (head === "ev") { ui.evening[rest[0]] = v; if (rest[0] === "newGuest" || rest[0] === "start") this._render(); return; }
     if (head === "pl") { const name = rest.slice(0, -1).join("."); ui.playerEdit[name][rest.at(-1)] = v; return; }
@@ -541,7 +662,7 @@ class BgRegalPanel extends HTMLElement {
     const target = e.target.closest("[data-a]");
     if (!target) return;
     // Klick in den Dialog schließt ihn nicht
-    if ((target.dataset.a === "close" || target.dataset.a === "closeqr") && e.target.closest("[data-stop]") && !e.target.closest(".close")) return;
+    if (["close", "closeqr", "closeshelfedit"].includes(target.dataset.a) && e.target.closest("[data-stop]") && !e.target.closest(".close")) return;
     e.preventDefault();
     const a = target.dataset.a, v = target.dataset.v;
     const ui = this._ui, t = this._t;
@@ -550,6 +671,29 @@ class BgRegalPanel extends HTMLElement {
       case "tab": this._tab = v; ui.game = null; break;
       case "sync": if (await this._call("sync_now")) this._showToast(t.syncStarted); return;
       case "filter": ui.filter = v; break;
+      case "openshelf": ui.shelf = v; window.scrollTo?.(0, 0); break;
+      case "closeshelf": ui.shelf = null; break;
+      case "newshelf": ui.shelfEdit = { original: "", name: "", area_id: "", layout: "upright", compartments: 6 }; break;
+      case "editshelf": {
+        const s = this._data.shelves.find((x) => x.name === v);
+        ui.shelfEdit = { original: s.name, name: s.name, area_id: s.area_id, layout: s.layout, compartments: s.compartments };
+        break;
+      }
+      case "closeshelfedit": ui.shelfEdit = null; break;
+      case "saveshelf": {
+        const e = ui.shelfEdit, name = e.name.trim();
+        const data = { name: e.original || name, area_id: e.area_id, layout: e.layout, compartments: Number(e.compartments) || 0 };
+        if (e.original && name !== e.original) data.new_name = name;
+        if (await this._call("set_shelf", data)) { ui.shelfEdit = null; if (ui.shelf !== null) ui.shelf = name; this._showToast(t.saved); }
+        return;
+      }
+      case "removeshelf":
+        if (confirm(t.confirmDelete) && await this._call("remove_shelf", { name: v })) { ui.shelfEdit = null; ui.shelf = null; }
+        return;
+      case "scan": this._openScan("session"); return;
+      case "scanean": this._openScan("ean"); return;
+      case "scanclose": this._closeScan(); return;
+      case "scanassign": await this._assignScanned(); return;
       case "open": return this._openGame(Number(v));
       case "close": ui.game = null; break;
       case "closeqr": ui.qr = null; break;
@@ -559,7 +703,7 @@ class BgRegalPanel extends HTMLElement {
         const ok = await this._call("set_game", {
           bgg_id: Number(v), shelf: ed.shelf, compartment: ed.compartment === "" ? 0 : Number(ed.compartment),
           in_base: !!ed.in_base, nfc_tag: ed.nfc_tag, light_profile: ed.light_profile, playlist: ed.playlist,
-          manual_url: ed.manual_url,
+          manual_url: ed.manual_url, ean: ed.ean,
         });
         if (ok) this._showToast(t.saved);
         return;
@@ -656,6 +800,117 @@ class BgRegalPanel extends HTMLElement {
     this._render();
   }
 
+  // ---- Scanner: Kamera (BarcodeDetector) oder Barcode-Scanner (tippt wie eine Tastatur) ----
+  /** mode "session": Code wie NFC-Tag behandeln; mode "ean": EAN ins Spiel-Fenster übernehmen. */
+  _openScan(mode) {
+    const t = this._t;
+    this._scan = { mode, result: null, assign: "", last: "", lastAt: 0 };
+    const box = this.shadowRoot.getElementById("scan");
+    box.innerHTML = `<div class="overlay scan-overlay"><div class="dialog small-dialog" role="dialog" aria-modal="true">
+      <button class="icon close" data-a="scanclose" aria-label="${t.close}">✕</button>
+      <h2>${mode === "ean" ? t.scanEan : t.scan}</h2>
+      <div class="scanvideo" hidden><video playsinline muted></video><div class="aim"></div></div>
+      <div id="scanbody"></div></div></div>`;
+    this._renderScan();
+    this.shadowRoot.querySelector('[data-k="scan.code"]')?.focus();
+    if (this._cameraSupported()) this._startCamera();
+  }
+
+  _cameraSupported() {
+    return "BarcodeDetector" in window && !!navigator.mediaDevices?.getUserMedia;
+  }
+
+  _renderScan() {
+    const t = this._t, s = this._scan;
+    const body = this.shadowRoot.getElementById("scanbody");
+    if (!s || !body) return;
+    let result = "";
+    const r = s.result;
+    if (r?.result === "started") result = `<p class="ok">▶ ${esc(r.name)} – ${t.scanStarted}</p>`;
+    else if (r?.result === "ended") result = `<p class="ok">■ ${esc(r.name)} – ${t.scanEnded}</p>`;
+    else if (r?.result === "busy") result = `<p class="warn">${t.scanBusy.replace("{name}", esc(r.running || ""))}</p>`;
+    else if (r?.result === "assigned") result = `<p class="ok">${t.scanAssigned.replace("{name}", esc(r.name))}</p>`;
+    else if (r?.result === "unknown") {
+      result = `<p>${t.scanUnknown.replace("{code}", esc(r.code))}</p>
+        <div class="row"><input list="bgr-allgames" placeholder="${t.search}" value="${esc(s.assign)}" data-k="scan.assign">
+        <button class="primary" data-a="scanassign" ${s.assign.trim() ? "" : "disabled"}>${t.assign}</button></div>
+        <datalist id="bgr-allgames">${this._data.games.filter((g) => !g.ean).map((g) => `<option value="${esc(g.name)}">`).join("")}</datalist>`;
+    } else if (r?.error) result = `<p class="warn">${esc(r.error)}</p>`;
+    body.innerHTML = `
+      <p class="muted small">${this._cameraSupported() ? t.scanHintCamera : t.scanHintNoCamera}</p>
+      <label class="block">${t.scanCode}<input inputmode="numeric" autocomplete="off" data-k="scan.code" placeholder="${t.scanCodePlaceholder}"></label>
+      ${result}`;
+  }
+
+  async _startCamera() {
+    const wrap = this.shadowRoot.querySelector(".scanvideo");
+    const video = wrap?.querySelector("video");
+    if (!video) return;
+    try {
+      const wanted = ["ean_13", "ean_8", "upc_a", "upc_e"];
+      const formats = (await BarcodeDetector.getSupportedFormats()).filter((f) => wanted.includes(f));
+      if (!formats.length) return;
+      this._stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      if (!this._scan) { this._stopCamera(); return; }
+      video.srcObject = this._stream;
+      await video.play();
+      wrap.hidden = false;
+      const detector = new BarcodeDetector({ formats });
+      this._scanTimer = setInterval(async () => {
+        if (!this._scan || video.readyState < 2) return;
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length) this._onCode(codes[0].rawValue, true);
+        } catch (_) { /* einzelne Bilder dürfen scheitern */ }
+      }, 250);
+    } catch (err) {
+      if (this._scan) { this._scan.result = { error: `${this._t.cameraError} (${err.name || err.message})` }; this._renderScan(); }
+    }
+  }
+
+  _stopCamera() {
+    clearInterval(this._scanTimer);
+    this._scanTimer = null;
+    this._stream?.getTracks().forEach((track) => track.stop());
+    this._stream = null;
+  }
+
+  _closeScan() {
+    this._stopCamera();
+    this._scan = null;
+    this.shadowRoot.getElementById("scan").innerHTML = "";
+  }
+
+  async _onCode(raw, fromCamera = false) {
+    const s = this._scan, code = String(raw || "").trim();
+    if (!s || !code) return;
+    // Kamera liefert denselben Code mehrmals hintereinander -> nur einmal je 3 Sekunden
+    if (code === s.last && Date.now() - s.lastAt < 3000) return;
+    s.last = code; s.lastAt = Date.now();
+    if (fromCamera) navigator.vibrate?.(60); // kurze Rückmeldung am Handy
+    if (s.mode === "ean") {
+      this._ui.edit.ean = code;
+      this._closeScan();
+      this._render();
+      return;
+    }
+    const res = await this._call("scan_code", { code }, true);
+    if (!this._scan) return;
+    s.result = res || null;
+    s.assign = "";
+    this._renderScan();
+  }
+
+  async _assignScanned() {
+    const s = this._scan, t = this._t;
+    const game = this._data.games.find((g) => g.name.toLowerCase() === s.assign.trim().toLowerCase());
+    if (!game) { s.result = { ...s.result, error: t.noMatch }; this._renderScan(); return; }
+    if (await this._call("set_game", { bgg_id: game.bgg_id, ean: s.result.code })) {
+      s.result = { result: "assigned", name: game.name };
+      this._renderScan();
+    }
+  }
+
   async _openGame(bggId) {
     const g = this._games.get(bggId);
     if (!g) return;
@@ -664,7 +919,7 @@ class BgRegalPanel extends HTMLElement {
     this._ui.lendTo = "";
     this._ui.edit = {
       shelf: g.shelf, compartment: g.compartment ?? "", in_base: g.in_base, nfc_tag: g.nfc_tag,
-      light_profile: g.light_profile, playlist: g.playlist, manual_url: g.manual_url,
+      light_profile: g.light_profile, playlist: g.playlist, manual_url: g.manual_url, ean: g.ean,
     };
     this._render();
     try {
@@ -675,6 +930,32 @@ class BgRegalPanel extends HTMLElement {
       this._render();
     }
   }
+}
+
+// Standardmaße in Zoll, wenn BGG für die Ausgabe keine Kartonmaße kennt
+const DEFAULT_DEPTH = 2.5;
+const DEFAULT_FACE = 11.5;
+const FALLBACK_COLORS = ["#6d5a4b", "#4b5d6d", "#5b6d4b", "#6d4b5f", "#4b6d68", "#6d644b"];
+const BARCODE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor"
+  d="M2 5h2v14H2zm3 0h1v14H5zm2 0h3v14H7zm4 0h1v14h-1zm3 0h2v14h-2zm3 0h1v14h-1zm2 0h3v14h-3z"/></svg>`;
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+/** Kartonfarbe aus dem Cover (beim Sync errechnet), sonst eine ruhige Ersatzfarbe. */
+function boxColor(g) {
+  return /^#[0-9a-f]{6}$/i.test(g.color || "") ? g.color : FALLBACK_COLORS[g.bgg_id % FALLBACK_COLORS.length];
+}
+
+/** Schwarz oder Weiß, je nachdem, was auf der Kartonfarbe besser lesbar ist. */
+function readableOn(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#1d1b18" : "#ffffff";
+}
+
+/** Höhe eines Rückens in der kleinen Regalvorschau (aus den Kartonmaßen). */
+function spineHeightPreview(g) {
+  return clamp(Math.round((Math.max(g.box_width || 0, g.box_length || 0) || DEFAULT_FACE) * 2.2), 16, 30);
 }
 
 function elapsed(started) {
@@ -749,6 +1030,38 @@ const CSS = `
   .form label, label.block { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--secondary-text-color); }
   label.check { flex-direction: row; align-items: center; gap: 8px; }
   .billy { margin-bottom: 24px; }
+  .room { margin-bottom: 24px; }
+  .room h2 { font-size: 16px; font-weight: 500; color: var(--secondary-text-color); margin: 0 0 10px; }
+  .shelfgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .shelfcard { flex-direction: column; align-items: stretch; text-align: left; padding: 12px; gap: 4px; border-radius: var(--radius); }
+  .shelfcard .preview { display: flex; align-items: flex-end; gap: 2px; height: 34px; padding: 0 2px 3px;
+                        border-bottom: 4px solid var(--wood); overflow: hidden; }
+  .shelfcard .preview span { width: 6px; flex: none; border-radius: 1px; }
+  .shelfcard .sname { font-weight: 500; font-size: 15px; margin-top: 6px; }
+  .shelfcard.add, .shelfcard.loose { justify-content: center; min-height: 90px; border-style: dashed; }
+  .shead { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; margin: 8px 0; }
+  .shead h2 { margin: 0; }
+  .frame { border: 6px solid var(--wood); border-radius: 4px; padding: 0 8px; background: var(--card-background-color); }
+  .frame .fach { border-bottom-width: 6px; margin: 0; padding: 8px 0 0; }
+  .frame .fach:last-child { border-bottom: 0; }
+  .spines { display: flex; align-items: flex-end; gap: 2px; overflow-x: auto; min-height: 60px; padding-bottom: 2px; }
+  .fach.stacked .spines { flex-direction: column-reverse; align-items: flex-start; gap: 1px; }
+  .spine { position: relative; padding: 0; border: 0; border-radius: 2px; flex: none; overflow: hidden; justify-content: center;
+           box-shadow: inset -2px 0 0 rgba(0,0,0,.18), inset 2px 0 0 rgba(255,255,255,.12); font-size: 11px; font-weight: 500; }
+  .fach.upright .spine span { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; overflow: hidden;
+                              text-overflow: ellipsis; max-height: calc(100% - 8px); padding: 4px 0; }
+  .fach.stacked .spine span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px; }
+  .spine:hover { filter: brightness(1.12); transform: translateY(-2px); }
+  .spine .mark { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; }
+  .spine .mark.lent { background: var(--warning-color, #ffa000); box-shadow: 0 0 0 1px #fff; }
+  .spine .mark.shame { background: #fff; opacity: .8; top: auto; bottom: 3px; }
+  .small-dialog { width: min(480px, 100%); }
+  .scanvideo { position: relative; margin: 8px 0; border-radius: 10px; overflow: hidden; background: #000; }
+  .scanvideo video { width: 100%; display: block; max-height: 50vh; object-fit: cover; }
+  .scanvideo .aim { position: absolute; left: 12%; right: 12%; top: 42%; height: 16%; border: 2px solid rgba(255,255,255,.8); border-radius: 6px; }
+  .scan-overlay { z-index: 15; }
+  p.ok { color: var(--success-color, #43a047); font-weight: 500; }
+  p.warn { color: var(--error-color); }
   .fach { border-bottom: 6px solid var(--wood); padding: 8px 0 4px; margin-bottom: 8px; }
   .fnum { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 6px; }
   .boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }

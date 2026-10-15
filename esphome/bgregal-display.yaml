@@ -1,33 +1,19 @@
-# ESPHome: BGRegal-Display (Waveshare ESP32-S3 Touch AMOLED 1.75")
+# ESPHome: BGRegal-Display (Waveshare ESP32-S3 Touch AMOLED 1.75") – Variante mit lokalen Dateien
 # Spielvorschlag -> annehmen -> Standort -> Sitzung mit Spielhilfe -> Beenden.
+#
+# Für den ESPHome Device Builder in Home Assistant ist bgregal-display-ha.yaml einfacher:
+# Sie lädt alles direkt aus GitHub und braucht keine weiteren Dateien.
 #
 # Benötigt ESPHome >= 2025.7 (homeassistant.action). In Home Assistant beim ESPHome-Gerät
 # „Dem Gerät erlauben, Home-Assistant-Aktionen auszuführen“ aktivieren.
-# Die Entity-IDs von BGRegal sind fest (sensor.bgregal_vorschlag, sensor.bgregal_sitzung),
-# deshalb muss hier nichts angepasst werden außer den Zugangsdaten in secrets.yaml.
 
 substitutions:
   name: bgregal-display
   friendly_name: BGRegal Display
-  suggestion_entity: sensor.bgregal_vorschlag
-  session_entity: sensor.bgregal_sitzung
 
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
-
-esp32:
-  board: esp32-s3-devkitc-1
-  variant: esp32s3
-  flash_size: 16MB
-  framework:
-    type: esp-idf
-
-psram:
-  mode: octal
-  speed: 80MHz
-
-logger:
 
 api:
   encryption:
@@ -42,5 +28,6 @@ wifi:
   password: !secret wifi_password
 
 packages:
+  board: !include board.yaml
   hardware: !include hardware_waveshare_amoled.yaml
   ui: !include ui.yaml

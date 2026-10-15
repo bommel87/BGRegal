@@ -18,7 +18,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.util import dt as dt_util
 
@@ -33,6 +33,7 @@ from .const import (
     DOMAIN,
     EVENING_CANDIDATES,
     EVENT_UNKNOWN_CODE,
+    INVENTORY_TIMEOUT_MIN,
     EVENT_LOAN_OVERDUE,
     EVENT_NEW_EXPANSION,
     EVENT_SESSION_ENDED,
@@ -70,6 +71,8 @@ class BgRegal:
         self._unsubs: list = []
         self._rng = random.Random()
         self.first_sync: asyncio.Task | None = None
+        self.inventory: dict[str, Any] | None = None  # laufende Inventur (nicht gespeichert)
+        self._inventory_timer = None
 
     # ---- Lebenszyklus --------------------------------------------------------
     async def async_start(self) -> None:
@@ -84,6 +87,9 @@ class BgRegal:
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
+        if self._inventory_timer:
+            self._inventory_timer()
+            self._inventory_timer = None
         await self.hass.async_add_executor_job(self.store.close)
 
     @property
@@ -220,6 +226,7 @@ class BgRegal:
                 "media_player": self.opt(CONF_MEDIA_PLAYER),
             },
             "dislike_options": list(DISLIKE_OPTIONS),
+            "inventory": self.inventory_state(),
         }
 
     async def async_after_sync(self, result: SyncResult) -> None:
@@ -316,7 +323,10 @@ class BgRegal:
         if bgg_id is None:
             return
         try:
-            await self._toggle_session(self.find_game(bgg_id))
+            if self.inventory:
+                await self.async_inventory_place(self.find_game(bgg_id))
+            else:
+                await self._toggle_session(self.find_game(bgg_id))
         except HomeAssistantError as err:
             _LOGGER.warning("NFC-Aktion fehlgeschlagen: %s", err)
 
@@ -343,10 +353,125 @@ class BgRegal:
             self.hass.bus.async_fire(EVENT_UNKNOWN_CODE, {"code": ean or raw})
             return {"result": "unknown", "code": ean or raw}
         game = self.find_game(bgg_id)
+        if self.inventory:
+            return {**await self.async_inventory_place(game), "code": ean or raw}
         result = await self._toggle_session(game)
         current = self.snapshot.get("session")
         return {"result": result, "code": ean or raw, "bgg_id": bgg_id, "name": game["name"],
                 "running": current["name"] if result == "busy" and current else None}
+
+    # ---- Inventur: Fach für Fach durchscannen ------------------------------------
+    def inventory_state(self) -> dict[str, Any] | None:
+        inv = self.inventory
+        if not inv:
+            return None
+        placed_ids = {p["bgg_id"] for p in inv["placed"]}
+        missing = [
+            {"bgg_id": g["bgg_id"], "name": g["name"]}
+            for g in self.snapshot.get("games", [])
+            if g["shelf"].lower() == inv["shelf"].lower() and g["compartment"] == inv["compartment"]
+            and g["bgg_id"] not in placed_ids and not (g["expansion"] and g["in_base"])
+        ]
+        return {
+            "shelf": inv["shelf"],
+            "compartment": inv["compartment"],
+            "placed": [{"bgg_id": p["bgg_id"], "name": p["name"]} for p in inv["placed"]],
+            "missing": missing,
+        }
+
+    def _require_inventory(self) -> dict[str, Any]:
+        if not self.inventory:
+            raise ServiceValidationError("Es läuft keine Inventur")
+        return self.inventory
+
+    @callback
+    def _inventory_touch(self) -> None:
+        """Nach INVENTORY_TIMEOUT_MIN ohne Scan endet die Inventur von selbst."""
+        if self._inventory_timer:
+            self._inventory_timer()
+        self._inventory_timer = async_call_later(
+            self.hass, INVENTORY_TIMEOUT_MIN * 60, self._inventory_timeout
+        )
+
+    @callback
+    def _inventory_timeout(self, _now: datetime | None = None) -> None:
+        self._inventory_timer = None
+        if self.inventory:
+            _LOGGER.info("Inventur „%s“ nach %s Minuten ohne Scan beendet", self.inventory["shelf"], INVENTORY_TIMEOUT_MIN)
+            self.inventory = None
+            async_dispatcher_send(self.hass, SIGNAL_UPDATE)
+
+    async def async_start_inventory(self, shelf: str, compartment: int = 1) -> dict[str, Any]:
+        name = shelf.strip()
+        if not name:
+            raise ServiceValidationError("Name des Regals fehlt")
+        existing = next((s for s in self.snapshot.get("shelves", []) if s["name"].lower() == name.lower()), None)
+        if existing:
+            name = existing["name"]
+        else:
+            await self._run(self.store.set_shelf, name)  # neues Regal anlegen
+        self.inventory = {"shelf": name, "compartment": max(compartment, 1), "placed": []}
+        self._inventory_touch()
+        await self.async_refresh()
+        return self.inventory_state()
+
+    async def async_inventory_place(self, game: dict[str, Any]) -> dict[str, Any]:
+        """Spiel ins aktuelle Fach stellen; merkt sich den alten Standort für Rückgängig."""
+        inv = self._require_inventory()
+        self._inventory_touch()
+        result = {"result": "placed", "bgg_id": game["bgg_id"], "name": game["name"],
+                  "shelf": inv["shelf"], "compartment": inv["compartment"]}
+        if any(p["bgg_id"] == game["bgg_id"] for p in inv["placed"]):
+            return {**result, "result": "already"}
+        inv["placed"].append({
+            "bgg_id": game["bgg_id"], "name": game["name"], "shelf": game["shelf"],
+            "compartment": game["compartment"], "in_base": game["in_base"],
+        })
+        await self._run(
+            self.store.set_game_meta, game["bgg_id"],
+            {"shelf": inv["shelf"], "compartment": inv["compartment"], "in_base": 0},
+        )
+        await self.async_refresh()
+        return result
+
+    async def async_inventory_undo(self) -> dict[str, Any] | None:
+        inv = self._require_inventory()
+        self._inventory_touch()
+        if not inv["placed"]:
+            return None
+        last = inv["placed"].pop()
+        await self._run(
+            self.store.set_game_meta, last["bgg_id"],
+            {"shelf": last["shelf"], "compartment": last["compartment"], "in_base": int(bool(last["in_base"]))},
+        )
+        await self.async_refresh()
+        return {"bgg_id": last["bgg_id"], "name": last["name"]}
+
+    async def _clear_missing(self) -> list[str]:
+        """Spiele, die laut BGRegal im Fach standen, aber nicht gescannt wurden -> ohne Standort."""
+        state = self.inventory_state() or {"missing": []}
+        for g in state["missing"]:
+            await self._run(self.store.set_game_meta, g["bgg_id"], {"shelf": "", "compartment": None})
+        return [g["name"] for g in state["missing"]]
+
+    async def async_inventory_next(self, clear_missing: bool, compartment: int | None = None) -> dict[str, Any]:
+        inv = self._require_inventory()
+        cleared = await self._clear_missing() if clear_missing else []
+        inv["compartment"] = compartment if compartment else inv["compartment"] + 1
+        inv["placed"] = []
+        self._inventory_touch()
+        await self.async_refresh()
+        return {"cleared": cleared, "inventory": self.inventory_state()}
+
+    async def async_stop_inventory(self, clear_missing: bool) -> dict[str, Any]:
+        self._require_inventory()
+        cleared = await self._clear_missing() if clear_missing else []
+        self.inventory = None
+        if self._inventory_timer:
+            self._inventory_timer()
+            self._inventory_timer = None
+        await self.async_refresh()
+        return {"cleared": cleared}
 
     # ---- Sitzung -------------------------------------------------------------
     async def _save_session(self, data: dict[str, Any] | None) -> None:

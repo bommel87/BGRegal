@@ -224,6 +224,62 @@
         }
       }
     },
+    "start_inventory": {
+      "name": "Start inventory",
+      "description": "Scan a shelf compartment by compartment; scans set the location instead of starting a session.",
+      "fields": {
+        "shelf": {
+          "name": "Shelf",
+          "description": "Shelf to scan (created if new)."
+        },
+        "compartment": {
+          "name": "Compartment",
+          "description": "Compartment to start with."
+        }
+      }
+    },
+    "inventory_place": {
+      "name": "Place game",
+      "description": "Puts a game into the current compartment of the inventory.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG ID",
+          "description": "BoardGameGeek ID of the game."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Game name (alternative to the BGG ID)."
+        }
+      }
+    },
+    "inventory_undo": {
+      "name": "Undo last scan",
+      "description": "Puts the last scanned game back where it was."
+    },
+    "inventory_next": {
+      "name": "Next compartment",
+      "description": "Continues with the next compartment.",
+      "fields": {
+        "clear_missing": {
+          "name": "Clear unscanned",
+          "description": "Games that were in this compartment but not scanned get no location."
+        },
+        "compartment": {
+          "name": "Compartment",
+          "description": "Jump to this compartment instead of the next one."
+        }
+      }
+    },
+    "stop_inventory": {
+      "name": "Finish inventory",
+      "description": "Ends the inventory; scans start sessions again.",
+      "fields": {
+        "clear_missing": {
+          "name": "Clear unscanned",
+          "description": "Games that were in the current compartment but not scanned get no location."
+        }
+      }
+    },
     "assign_scanned_tag": {
       "name": "Assign scanned tag",
       "description": "Assign the tag scanned in the last 10 minutes.",

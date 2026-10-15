@@ -297,3 +297,42 @@ evening_qr:
     base_url: *base_url
 
 dismiss_expansions:
+
+start_inventory:
+  fields:
+    shelf:
+      required: true
+      example: Regal 1
+      selector:
+        text:
+    compartment:
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 50
+          mode: box
+
+inventory_place:
+  fields:
+    bgg_id: *bgg_id
+    name: *name
+
+inventory_undo:
+
+inventory_next:
+  fields:
+    clear_missing: &clear_missing
+      default: false
+      selector:
+        boolean:
+    compartment:
+      selector:
+        number:
+          min: 1
+          max: 50
+          mode: box
+
+stop_inventory:
+  fields:
+    clear_missing: *clear_missing

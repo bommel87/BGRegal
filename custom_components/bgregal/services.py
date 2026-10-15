@@ -45,6 +45,18 @@ SCHEMAS: dict[str, vol.Schema] = {
         }
     ),
     "remove_shelf": vol.Schema({vol.Required("name"): cv.string}),
+    "start_inventory": vol.Schema(
+        {vol.Required("shelf"): cv.string, vol.Optional("compartment", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=50))}
+    ),
+    "inventory_place": vol.Schema(GAME),
+    "inventory_undo": vol.Schema({}),
+    "inventory_next": vol.Schema(
+        {
+            vol.Optional("clear_missing", default=False): cv.boolean,
+            vol.Optional("compartment"): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
+        }
+    ),
+    "stop_inventory": vol.Schema({vol.Optional("clear_missing", default=False): cv.boolean}),
     "assign_scanned_tag": vol.Schema(GAME),
     "lend_game": vol.Schema({**GAME, vol.Required("borrower"): cv.string}),
     "return_game": vol.Schema(GAME),
@@ -118,6 +130,11 @@ SCHEMAS: dict[str, vol.Schema] = {
 RESPONSES = {
     "assign_scanned_tag": SupportsResponse.OPTIONAL,
     "scan_code": SupportsResponse.OPTIONAL,
+    "start_inventory": SupportsResponse.OPTIONAL,
+    "inventory_place": SupportsResponse.OPTIONAL,
+    "inventory_undo": SupportsResponse.OPTIONAL,
+    "inventory_next": SupportsResponse.OPTIONAL,
+    "stop_inventory": SupportsResponse.OPTIONAL,
     "finish_session": SupportsResponse.OPTIONAL,
     "session_qr": SupportsResponse.ONLY,
     "suggest": SupportsResponse.OPTIONAL,
@@ -159,6 +176,16 @@ async def _handle(regal: BgRegal, service: str, d: dict[str, Any]) -> dict[str, 
             )
         case "remove_shelf":
             await regal.async_remove_shelf(d["name"])
+        case "start_inventory":
+            return await regal.async_start_inventory(d["shelf"], d["compartment"])
+        case "inventory_place":
+            return await regal.async_inventory_place(_game(regal, d))
+        case "inventory_undo":
+            return {"undone": await regal.async_inventory_undo()}
+        case "inventory_next":
+            return await regal.async_inventory_next(d["clear_missing"], d.get("compartment"))
+        case "stop_inventory":
+            return await regal.async_stop_inventory(d["clear_missing"])
         case "assign_scanned_tag":
             return {"nfc_tag": await regal.async_assign_scanned_tag(_game(regal, d))}
         case "lend_game":

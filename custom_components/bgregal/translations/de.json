@@ -224,6 +224,62 @@
         }
       }
     },
+    "start_inventory": {
+      "name": "Inventur starten",
+      "description": "Ein Regal Fach für Fach durchscannen; Scans setzen den Standort statt eine Sitzung zu starten.",
+      "fields": {
+        "shelf": {
+          "name": "Regal",
+          "description": "Regal, das durchgescannt wird (wird bei Bedarf angelegt)."
+        },
+        "compartment": {
+          "name": "Fach",
+          "description": "Fach, mit dem es losgeht."
+        }
+      }
+    },
+    "inventory_place": {
+      "name": "Spiel einsortieren",
+      "description": "Stellt ein Spiel ins aktuelle Fach der Inventur.",
+      "fields": {
+        "bgg_id": {
+          "name": "BGG-ID",
+          "description": "BoardGameGeek-ID des Spiels."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name des Spiels (statt der BGG-ID)."
+        }
+      }
+    },
+    "inventory_undo": {
+      "name": "Letzten Scan zurücknehmen",
+      "description": "Stellt das zuletzt gescannte Spiel an seinen alten Platz zurück."
+    },
+    "inventory_next": {
+      "name": "Nächstes Fach",
+      "description": "Weiter mit dem nächsten Fach.",
+      "fields": {
+        "clear_missing": {
+          "name": "Nicht gescannte leeren",
+          "description": "Spiele, die im Fach standen, aber nicht gescannt wurden, bekommen keinen Standort."
+        },
+        "compartment": {
+          "name": "Fach",
+          "description": "Zu diesem Fach springen statt zum nächsten."
+        }
+      }
+    },
+    "stop_inventory": {
+      "name": "Inventur beenden",
+      "description": "Beendet die Inventur; Scans starten wieder Sitzungen.",
+      "fields": {
+        "clear_missing": {
+          "name": "Nicht gescannte leeren",
+          "description": "Spiele, die im aktuellen Fach standen, aber nicht gescannt wurden, bekommen keinen Standort."
+        }
+      }
+    },
     "assign_scanned_tag": {
       "name": "Gescannten Tag zuordnen",
       "description": "Ordnet den in den letzten 10 Minuten gescannten Tag zu.",

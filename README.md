@@ -71,6 +71,19 @@ drücken (gilt für den Tag der letzten 10 Minuten). Danach gilt:
 - **Scan** startet die Sitzung: Lichtprofil (Szene oder Skript) und Playlist laufen an.
 - **Zweiter Scan** desselben Tags beendet sie: Musik pausiert, die Szene für Sitzungsende läuft.
 
+### Inventur: Regal per Scan einräumen
+
+Unter *Regal* startet **Inventur** das Durchscannen eines Regals. Du wählst das Regal (auch ein neues) und das Fach,
+bei dem du anfängst. Dann scannst du die Spiele dieses Fachs nacheinander: BGRegal trägt Regal und Fach sofort ein.
+Es funktioniert mit Kamera, Barcode-Scanner oder NFC-Tag.
+
+- Unter dem Scanfeld steht die Liste des Fachs, **Rückgängig** setzt den letzten Scan zurück.
+- Spiele ohne Code fügst du per Name hinzu; einen unbekannten Barcode ordnest du einmal zu, danach steht das Spiel im Fach.
+- **Nächstes Fach** schaltet weiter, **Fertig** beendet. Standen laut BGRegal Spiele im Fach, die du nicht gescannt
+  hast, fragt BGRegal, ob sie auf „Ohne Standort“ gesetzt werden.
+- Während der Inventur starten Scans keine Sitzung, auch NFC-Tags aus der Home-Assistant-App nicht. Nach 10 Minuten
+  ohne Scan endet die Inventur von selbst.
+
 ### EAN-Barcode
 
 Statt eines NFC-Tags (oder zusätzlich) kannst du den Barcode auf der Schachtel nutzen. Oben im Panel öffnet das
@@ -130,6 +143,7 @@ Alle Dienste liegen unter `bgregal.*`; ein Spiel gibst du mit `bgg_id` oder `nam
 | `set_game` | `shelf`, `compartment`, `in_base`, `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`; leer = löschen |
 | `scan_code` | gescannter Barcode oder Tag: Sitzung starten/beenden, sonst `unknown` |
 | `set_shelf` / `remove_shelf` | Regal: `area_id`, `compartments`, `new_name` |
+| `start_inventory` / `inventory_place` / `inventory_undo` / `inventory_next` / `stop_inventory` | Inventur; `clear_missing` setzt nicht gescannte Spiele des Fachs auf „Ohne Standort“ |
 | `assign_scanned_tag` | zuletzt gescannten Tag zuordnen |
 | `lend_game` / `return_game` | verleihen (`borrower`) / zurück |
 | `start_session` / `end_session` / `cancel_session` | Sitzung; ohne Spiel startet der angenommene Vorschlag |

@@ -51,6 +51,23 @@ SERVICES = {
     }),
     "remove_shelf": ("Remove shelf", "Removes an empty shelf.", "Regal entfernen", "Entfernt ein leeres Regal.", {
         "name": ("Shelf", "Name of the shelf.", "Regal", "Name des Regals.")}),
+    "start_inventory": ("Start inventory", "Scan a shelf compartment by compartment; scans set the location instead of starting a session.",
+                        "Inventur starten", "Ein Regal Fach für Fach durchscannen; Scans setzen den Standort statt eine Sitzung zu starten.", {
+        "shelf": ("Shelf", "Shelf to scan (created if new).", "Regal", "Regal, das durchgescannt wird (wird bei Bedarf angelegt)."),
+        "compartment": ("Compartment", "Compartment to start with.", "Fach", "Fach, mit dem es losgeht.")}),
+    "inventory_place": ("Place game", "Puts a game into the current compartment of the inventory.",
+                        "Spiel einsortieren", "Stellt ein Spiel ins aktuelle Fach der Inventur.", GAME_FIELDS),
+    "inventory_undo": ("Undo last scan", "Puts the last scanned game back where it was.",
+                       "Letzten Scan zurücknehmen", "Stellt das zuletzt gescannte Spiel an seinen alten Platz zurück.", {}),
+    "inventory_next": ("Next compartment", "Continues with the next compartment.",
+                       "Nächstes Fach", "Weiter mit dem nächsten Fach.", {
+        "clear_missing": ("Clear unscanned", "Games that were in this compartment but not scanned get no location.",
+                          "Nicht gescannte leeren", "Spiele, die im Fach standen, aber nicht gescannt wurden, bekommen keinen Standort."),
+        "compartment": ("Compartment", "Jump to this compartment instead of the next one.", "Fach", "Zu diesem Fach springen statt zum nächsten.")}),
+    "stop_inventory": ("Finish inventory", "Ends the inventory; scans start sessions again.",
+                       "Inventur beenden", "Beendet die Inventur; Scans starten wieder Sitzungen.", {
+        "clear_missing": ("Clear unscanned", "Games that were in the current compartment but not scanned get no location.",
+                          "Nicht gescannte leeren", "Spiele, die im aktuellen Fach standen, aber nicht gescannt wurden, bekommen keinen Standort.")}),
     "assign_scanned_tag": ("Assign scanned tag", "Assign the tag scanned in the last 10 minutes.",
                            "Gescannten Tag zuordnen", "Ordnet den in den letzten 10 Minuten gescannten Tag zu.", GAME_FIELDS),
     "lend_game": ("Lend game", "Mark a game as lent.", "Spiel verleihen", "Markiert ein Spiel als verliehen.", {

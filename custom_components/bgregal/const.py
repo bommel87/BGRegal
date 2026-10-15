@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "bgregal"
-VERSION = "0.2.1"
+VERSION = "0.3.0"
 
 CONF_USERNAME = "username"
 CONF_TOKEN = "token"
@@ -37,3 +37,4 @@ EVENT_UNKNOWN_CODE = "bgregal_unknown_code"
 TAG_MAX_AGE_MIN = 10  # gescannter Tag gilt so lange für „Gescannten übernehmen“
 LOAN_REPEAT_DAYS = 30  # nach der ersten Erinnerung alle 30 Tage erneut
 EVENING_CANDIDATES = 8
+INVENTORY_TIMEOUT_MIN = 10  # Inventur endet nach so vielen Minuten ohne Scan

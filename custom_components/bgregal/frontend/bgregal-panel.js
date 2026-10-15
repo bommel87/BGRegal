@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.2.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.2.1";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -15,7 +15,7 @@ class BgRegalPanel extends HTMLElement {
     this._data = null;
     this._error = null;
     this._ui = {
-      search: "", filter: "all", shelf: null, shelfEdit: null, game: null, gamePlays: null, edit: {}, lendTo: "",
+      search: "", filter: "all", shelfEdit: null, game: null, gamePlays: null, edit: {}, lendTo: "",
       sug: { players: "", mode: "any", game_type: "any", max_playtime: "", attendees: [] },
       finish: null, qr: null, evening: null, eveningQr: null, newPlayer: "", playerEdit: {},
       order: null,
@@ -169,13 +169,13 @@ class BgRegalPanel extends HTMLElement {
     }
   }
 
-  _tile(g, extra = "") {
+  _tile(g, extra = "", cls = "") {
     const t = this._t;
     const exps = this._data.games.filter((e) => e.expansion && e.in_base && e.base_ids.includes(g.bgg_id)).length;
     const facts = [];
     facts.push(g.plays ? `${g.plays}×` : t.neverPlayed);
     if (g.last_play) facts.push(fmtDate(g.last_play));
-    return `<button class="tile ${g.loan ? "lent" : ""} ${g.plays ? "" : "shame"}" data-a="open" data-v="${g.bgg_id}">
+    return `<button class="tile ${cls} ${g.loan ? "lent" : ""} ${g.plays ? "" : "shame"}" data-a="open" data-v="${g.bgg_id}">
       ${g.thumbnail ? `<img src="${esc(g.thumbnail)}" alt="" loading="lazy">` : `<div class="noimg">🎲</div>`}
       <div class="tname">${esc(g.name)}</div>
       <div class="tfacts">${facts.join(" · ")}</div>
@@ -198,36 +198,35 @@ class BgRegalPanel extends HTMLElement {
     return (areaId && this._hass.areas?.[areaId]?.name) || "";
   }
 
+  /** IDs der Spiele, die zu Suche und Filter passen; null = nichts hervorheben. */
+  _hits() {
+    const ui = this._ui;
+    const q = ui.search.trim().toLowerCase();
+    if (!q && ui.filter === "all") return null;
+    return new Set(this._shelfGames().filter((g) => {
+      if (q && !g.name.toLowerCase().includes(q)) return false;
+      if (ui.filter === "lent") return !!g.loan;
+      if (ui.filter === "nolocation") return !g.shelf;
+      if (ui.filter === "expansions") return g.expansion;
+      return true;
+    }).map((g) => g.bgg_id));
+  }
+
+  // Regal: nach Räumen gruppiert; Suche und Filter heben Treffer hervor, statt Spiele auszublenden
   _view_shelf() {
     const t = this._t, ui = this._ui;
-    const q = ui.search.trim().toLowerCase();
     const filters = ["all", "lent", "nolocation", "expansions"].map((f) =>
       `<button class="chip ${ui.filter === f ? "on" : ""}" data-a="filter" data-v="${f}">${t.filters[f]}</button>`).join("");
+    const hits = this._hits();
     const toolbar = `<div class="toolbar">
         <input type="search" placeholder="${t.search}" value="${esc(ui.search)}" data-k="search">
         <div class="chips">${filters}</div>
+        ${hits ? `<span class="hitcount ${hits.size ? "" : "none"}">${hits.size ? `${hits.size} ${hits.size === 1 ? t.hit : t.hitsWord}` : t.noMatch}</span>` : ""}
       </div>`;
     if (!this._data.games.length) return toolbar + `<div class="empty">${t.noGames}</div>`;
 
-    // Suche oder Filter: Trefferliste über alle Regale
-    if (q || ui.filter !== "all") {
-      let games = this._shelfGames();
-      if (ui.filter === "lent") games = games.filter((g) => g.loan);
-      if (ui.filter === "nolocation") games = games.filter((g) => !g.shelf);
-      if (ui.filter === "expansions") games = games.filter((g) => g.expansion);
-      if (q) games = games.filter((g) => g.name.toLowerCase().includes(q));
-      return toolbar + (games.length
-        ? `<div class="boxes">${games.map((g) => this._tile(g, g.shelf ? `<div class="tfacts">${esc(location(g, t))}</div>` : "")).join("")}</div>`
-        : `<div class="empty">${t.noMatch}</div>`);
-    }
-    if (ui.shelf !== null) return toolbar + this._shelfDetail(ui.shelf);
-    return toolbar + this._shelfOverview();
-  }
-
-  /** Übersicht: alle Regale nach Raum gruppiert, je Regal eine Vorschau der Kartonrücken. */
-  _shelfOverview() {
-    const t = this._t;
     const games = this._shelfGames();
+    const tile = (g) => this._tile(g, "", hits ? (hits.has(g.bgg_id) ? "hit" : "dim") : "");
     const rooms = new Map();
     for (const shelf of this._data.shelves) {
       const room = this._areaName(shelf.area_id);
@@ -236,73 +235,31 @@ class BgRegalPanel extends HTMLElement {
     }
     // Räume alphabetisch, Regale ohne Raum zuletzt
     const roomNames = [...rooms.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || naturalCompare(a, b));
-    const card = (shelf) => {
+    const shelfHtml = (shelf) => {
       const inShelf = games.filter((g) => g.shelf.toLowerCase() === shelf.name.toLowerCase());
-      const preview = inShelf.slice(0, 28)
-        .map((g) => `<span style="background:${boxColor(g)};height:${spineHeightPreview(g)}px"></span>`).join("");
-      return `<button class="shelfcard" data-a="openshelf" data-v="${esc(shelf.name)}">
-        <div class="preview">${preview || `<span class="muted small">${t.emptyShelf}</span>`}</div>
-        <div class="sname">${esc(shelf.name)}</div>
-        <div class="muted small">${shelf.games} ${shelf.games === 1 ? t.game : t.gamesWord} · ${shelf.compartments} ${t.compartments}</div>
-      </button>`;
+      const rows = [];
+      for (let n = 1; n <= shelf.compartments; n++) {
+        const list = inShelf.filter((g) => g.compartment === n);
+        rows.push(`<div class="fach"><div class="fnum">${t.compartment} ${n}</div><div class="boxes">${list.map(tile).join("") || `<span class="muted small">${t.emptyCompartment}</span>`}</div></div>`);
+      }
+      const loose = inShelf.filter((g) => !g.compartment);
+      if (loose.length) rows.push(`<div class="fach"><div class="fnum">${t.noCompartment}</div><div class="boxes">${loose.map(tile).join("")}</div></div>`);
+      return `<section class="billy"><div class="shead"><h2>${esc(shelf.name)}</h2>
+        <button class="link" data-a="editshelf" data-v="${esc(shelf.name)}">${t.shelfSettings}</button></div>${rows.join("")}</section>`;
     };
-    const unplaced = games.filter((g) => !g.shelf).length;
-    return roomNames.map((room) => `<section class="room"><h2>${esc(room || t.noRoom)}</h2>
-        <div class="shelfgrid">${rooms.get(room).map(card).join("")}</div></section>`).join("")
-      + `<section class="room"><div class="shelfgrid">
-        ${unplaced ? `<button class="shelfcard loose" data-a="openshelf" data-v=""><div class="sname">${t.noLocation}</div>
-          <div class="muted small">${unplaced} ${unplaced === 1 ? t.game : t.gamesWord}</div></button>` : ""}
-        <button class="shelfcard add" data-a="newshelf"><div class="sname">+ ${t.newShelf}</div></button></div></section>`;
+    const unplaced = games.filter((g) => !g.shelf);
+    return toolbar
+      + roomNames.map((room) => `<section class="room"><h2 class="roomname">${esc(room || t.noRoom)}</h2>${rooms.get(room).map(shelfHtml).join("")}</section>`).join("")
+      + (unplaced.length ? `<section class="billy loose"><h2>${t.noLocation}</h2><div class="boxes">${unplaced.map(tile).join("")}</div></section>` : "")
+      + `<div class="row"><button data-a="newshelf">+ ${t.newShelf}</button></div>`;
   }
 
-  /** Ein Regal von vorn: Fächer mit den Kartons in Seitenansicht. Leerer Name = ohne Standort. */
-  _shelfDetail(name) {
-    const t = this._t;
-    const games = this._shelfGames();
-    const back = `<button class="link" data-a="closeshelf">← ${t.allShelves}</button>`;
-    if (!name) {
-      const loose = games.filter((g) => !g.shelf);
-      return `${back}<section class="billy"><h2>${t.noLocation}</h2><p class="muted small">${t.noLocationHint}</p>
-        <div class="boxes">${loose.map((g) => this._tile(g)).join("")}</div></section>`;
-    }
-    const shelf = this._data.shelves.find((s) => s.name.toLowerCase() === name.toLowerCase());
-    // Nach dem Umbenennen kennt das Panel den neuen Namen erst mit dem nächsten Datenstand
-    if (!shelf) return `${back}<div class="empty">${t.loading}</div>`;
-    const inShelf = games.filter((g) => g.shelf.toLowerCase() === shelf.name.toLowerCase());
-    const stacked = shelf.layout === "stacked";
-    const rows = [];
-    for (let n = 1; n <= shelf.compartments; n++) {
-      rows.push(this._compartment(`${t.compartment} ${n}`, inShelf.filter((g) => g.compartment === n), stacked));
-    }
-    const loose = inShelf.filter((g) => !g.compartment);
-    if (loose.length) rows.push(this._compartment(t.noCompartment, loose, stacked));
-    const room = this._areaName(shelf.area_id);
-    return `${back}<section class="billy">
-      <div class="shead"><h2>${esc(shelf.name)}</h2><span class="muted">${esc(room || t.noRoom)}</span>
-        <button class="link" data-a="editshelf" data-v="${esc(shelf.name)}">${t.shelfSettings}</button></div>
-      <div class="frame">${rows.join("")}</div></section>`;
-  }
-
-  _compartment(label, list, stacked) {
-    const t = this._t;
-    const boxes = list.map((g) => this._spine(g, stacked)).join("");
-    return `<div class="fach ${stacked ? "stacked" : "upright"}"><div class="fnum">${esc(label)}</div>
-      <div class="spines">${boxes || `<span class="muted small">${t.emptyCompartment}</span>`}</div></div>`;
-  }
-
-  /** Kartonrücken: Dicke aus den BGG-Maßen (Zoll), Farbe aus dem Cover. */
-  _spine(g, stacked) {
-    const t = this._t;
-    const depth = g.box_depth || DEFAULT_DEPTH;
-    const face = Math.max(g.box_width || 0, g.box_length || 0) || DEFAULT_FACE;
-    const color = boxColor(g);
-    const ink = readableOn(color);
-    const thick = clamp(Math.round(depth * (stacked ? 9 : 13)), stacked ? 16 : 22, stacked ? 44 : 64);
-    const long = clamp(Math.round(face * (stacked ? 17 : 14)), stacked ? 120 : 110, stacked ? 230 : 190);
-    const size = stacked ? `height:${thick}px;width:${long}px` : `width:${thick}px;height:${long}px`;
-    const marks = `${g.loan ? `<i class="mark lent" title="${t.lentTo} ${esc(g.loan.borrower)}"></i>` : ""}${g.plays ? "" : `<i class="mark shame" title="${t.neverPlayed}"></i>`}`;
-    return `<button class="spine" style="${size};background:${color};color:${ink}" data-a="open" data-v="${g.bgg_id}"
-      title="${esc(g.name)} · ${g.plays ? `${g.plays}×` : t.neverPlayed}"><span>${esc(g.name)}</span>${marks}</button>`;
+  /** Ersten Treffer sichtbar machen, ohne das Suchfeld zu verlassen. */
+  _scrollToHit() {
+    const hit = this.shadowRoot.querySelector(".tile.hit");
+    if (!hit) return;
+    const r = hit.getBoundingClientRect();
+    if (r.top < 120 || r.bottom > window.innerHeight) hit.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
   _shelfDialog() {
@@ -316,9 +273,6 @@ class BgRegalPanel extends HTMLElement {
         <label>${t.name}<input value="${esc(e.name)}" data-k="sh.name"></label>
         <label>${t.room}<select data-k="sh.area_id"><option value="">${t.noRoom}</option>${areas.map((a) =>
           `<option value="${esc(a.area_id)}" ${a.area_id === e.area_id ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></label>
-        <label>${t.layout}<select data-k="sh.layout">
-          <option value="upright" ${e.layout === "upright" ? "selected" : ""}>${t.upright}</option>
-          <option value="stacked" ${e.layout === "stacked" ? "selected" : ""}>${t.stacked}</option></select></label>
         <label>${t.compartments}<input type="number" min="1" max="50" value="${esc(e.compartments)}" data-k="sh.compartments"></label>
       </div>
       <p class="muted small">${t.shelfHint}</p>
@@ -627,7 +581,7 @@ class BgRegalPanel extends HTMLElement {
     const v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
     const ui = this._ui;
     const [head, ...rest] = k.split(".");
-    if (k === "search") { ui.search = v; this._render(); return; }
+    if (k === "search") { ui.search = v; this._render(); this._scrollToHit(); return; }
     if (k === "lendTo") { ui.lendTo = v; this._render(); return; }
     if (k === "newPlayer") { ui.newPlayer = v; this._render(); return; }
     if (head === "edit") { ui.edit[rest[0]] = v; return; }
@@ -670,25 +624,23 @@ class BgRegalPanel extends HTMLElement {
       case "menu": this.dispatchEvent(new Event("hass-toggle-menu", { bubbles: true, composed: true })); return;
       case "tab": this._tab = v; ui.game = null; break;
       case "sync": if (await this._call("sync_now")) this._showToast(t.syncStarted); return;
-      case "filter": ui.filter = v; break;
-      case "openshelf": ui.shelf = v; window.scrollTo?.(0, 0); break;
-      case "closeshelf": ui.shelf = null; break;
-      case "newshelf": ui.shelfEdit = { original: "", name: "", area_id: "", layout: "upright", compartments: 6 }; break;
+      case "filter": ui.filter = v; this._render(); this._scrollToHit(); return;
+      case "newshelf": ui.shelfEdit = { original: "", name: "", area_id: "", compartments: 6 }; break;
       case "editshelf": {
         const s = this._data.shelves.find((x) => x.name === v);
-        ui.shelfEdit = { original: s.name, name: s.name, area_id: s.area_id, layout: s.layout, compartments: s.compartments };
+        ui.shelfEdit = { original: s.name, name: s.name, area_id: s.area_id, compartments: s.compartments };
         break;
       }
       case "closeshelfedit": ui.shelfEdit = null; break;
       case "saveshelf": {
         const e = ui.shelfEdit, name = e.name.trim();
-        const data = { name: e.original || name, area_id: e.area_id, layout: e.layout, compartments: Number(e.compartments) || 0 };
+        const data = { name: e.original || name, area_id: e.area_id, compartments: Number(e.compartments) || 0 };
         if (e.original && name !== e.original) data.new_name = name;
-        if (await this._call("set_shelf", data)) { ui.shelfEdit = null; if (ui.shelf !== null) ui.shelf = name; this._showToast(t.saved); }
+        if (await this._call("set_shelf", data)) { ui.shelfEdit = null; this._showToast(t.saved); }
         return;
       }
       case "removeshelf":
-        if (confirm(t.confirmDelete) && await this._call("remove_shelf", { name: v })) { ui.shelfEdit = null; ui.shelf = null; }
+        if (confirm(t.confirmDelete) && await this._call("remove_shelf", { name: v })) ui.shelfEdit = null;
         return;
       case "scan": this._openScan("session"); return;
       case "scanean": this._openScan("ean"); return;
@@ -932,31 +884,8 @@ class BgRegalPanel extends HTMLElement {
   }
 }
 
-// Standardmaße in Zoll, wenn BGG für die Ausgabe keine Kartonmaße kennt
-const DEFAULT_DEPTH = 2.5;
-const DEFAULT_FACE = 11.5;
-const FALLBACK_COLORS = ["#6d5a4b", "#4b5d6d", "#5b6d4b", "#6d4b5f", "#4b6d68", "#6d644b"];
 const BARCODE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor"
   d="M2 5h2v14H2zm3 0h1v14H5zm2 0h3v14H7zm4 0h1v14h-1zm3 0h2v14h-2zm3 0h1v14h-1zm2 0h3v14h-3z"/></svg>`;
-
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-
-/** Kartonfarbe aus dem Cover (beim Sync errechnet), sonst eine ruhige Ersatzfarbe. */
-function boxColor(g) {
-  return /^#[0-9a-f]{6}$/i.test(g.color || "") ? g.color : FALLBACK_COLORS[g.bgg_id % FALLBACK_COLORS.length];
-}
-
-/** Schwarz oder Weiß, je nachdem, was auf der Kartonfarbe besser lesbar ist. */
-function readableOn(hex) {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#1d1b18" : "#ffffff";
-}
-
-/** Höhe eines Rückens in der kleinen Regalvorschau (aus den Kartonmaßen). */
-function spineHeightPreview(g) {
-  return clamp(Math.round((Math.max(g.box_width || 0, g.box_length || 0) || DEFAULT_FACE) * 2.2), 16, 30);
-}
 
 function elapsed(started) {
   const sec = Math.max(0, Math.floor((Date.now() - new Date(started)) / 1000));
@@ -1030,31 +959,17 @@ const CSS = `
   .form label, label.block { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--secondary-text-color); }
   label.check { flex-direction: row; align-items: center; gap: 8px; }
   .billy { margin-bottom: 24px; }
-  .room { margin-bottom: 24px; }
-  .room h2 { font-size: 16px; font-weight: 500; color: var(--secondary-text-color); margin: 0 0 10px; }
-  .shelfgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-  .shelfcard { flex-direction: column; align-items: stretch; text-align: left; padding: 12px; gap: 4px; border-radius: var(--radius); }
-  .shelfcard .preview { display: flex; align-items: flex-end; gap: 2px; height: 34px; padding: 0 2px 3px;
-                        border-bottom: 4px solid var(--wood); overflow: hidden; }
-  .shelfcard .preview span { width: 6px; flex: none; border-radius: 1px; }
-  .shelfcard .sname { font-weight: 500; font-size: 15px; margin-top: 6px; }
-  .shelfcard.add, .shelfcard.loose { justify-content: center; min-height: 90px; border-style: dashed; }
-  .shead { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; margin: 8px 0; }
-  .shead h2 { margin: 0; }
-  .frame { border: 6px solid var(--wood); border-radius: 4px; padding: 0 8px; background: var(--card-background-color); }
-  .frame .fach { border-bottom-width: 6px; margin: 0; padding: 8px 0 0; }
-  .frame .fach:last-child { border-bottom: 0; }
-  .spines { display: flex; align-items: flex-end; gap: 2px; overflow-x: auto; min-height: 60px; padding-bottom: 2px; }
-  .fach.stacked .spines { flex-direction: column-reverse; align-items: flex-start; gap: 1px; }
-  .spine { position: relative; padding: 0; border: 0; border-radius: 2px; flex: none; overflow: hidden; justify-content: center;
-           box-shadow: inset -2px 0 0 rgba(0,0,0,.18), inset 2px 0 0 rgba(255,255,255,.12); font-size: 11px; font-weight: 500; }
-  .fach.upright .spine span { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; overflow: hidden;
-                              text-overflow: ellipsis; max-height: calc(100% - 8px); padding: 4px 0; }
-  .fach.stacked .spine span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px; }
-  .spine:hover { filter: brightness(1.12); transform: translateY(-2px); }
-  .spine .mark { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; }
-  .spine .mark.lent { background: var(--warning-color, #ffa000); box-shadow: 0 0 0 1px #fff; }
-  .spine .mark.shame { background: #fff; opacity: .8; top: auto; bottom: 3px; }
+  .room { margin-bottom: 8px; }
+  h2.roomname { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+                color: var(--secondary-text-color); margin: 24px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--divider-color); }
+  .shead { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
+  .shead h2 { margin: 0 0 8px; }
+  .tile.hit { outline: 3px solid var(--accent-color, #ff9800); outline-offset: 1px;
+              background: color-mix(in srgb, var(--accent-color, #ff9800) 14%, var(--card-background-color)); }
+  .tile.dim, .tile.dim.lent { opacity: .3; }
+  .tile.dim:hover, .tile.dim.lent:hover { opacity: .8; }
+  .hitcount { font-size: 13px; font-weight: 500; color: var(--accent-color, #ff9800); }
+  .hitcount.none { color: var(--error-color); }
   .small-dialog { width: min(480px, 100%); }
   .scanvideo { position: relative; margin: 8px 0; border-radius: 10px; overflow: hidden; background: #000; }
   .scanvideo video { width: 100%; display: block; max-height: 50vh; object-fit: cover; }

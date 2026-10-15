@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "bgregal"
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 CONF_USERNAME = "username"
 CONF_TOKEN = "token"

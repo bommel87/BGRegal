@@ -117,12 +117,6 @@
         "children": "Kinder"
       }
     },
-    "layout": {
-      "options": {
-        "upright": "Stehend",
-        "stacked": "Liegend"
-      }
-    },
     "dislike": {
       "options": {
         "cooperative": "Kooperativ",
@@ -200,7 +194,7 @@
     },
     "set_shelf": {
       "name": "Regal einstellen",
-      "description": "Raum, Darstellung, Fächer oder neuer Name eines Regals.",
+      "description": "Raum, Fächer oder neuer Name eines Regals.",
       "fields": {
         "name": {
           "name": "Regal",
@@ -213,10 +207,6 @@
         "area_id": {
           "name": "Raum",
           "description": "Bereich des Regals in Home Assistant (leer = keiner)."
-        },
-        "layout": {
-          "name": "Darstellung",
-          "description": "Kartons stehend oder liegend gestapelt."
         },
         "compartments": {
           "name": "Fächer",

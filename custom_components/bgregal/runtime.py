@@ -183,7 +183,6 @@ class BgRegal:
         name: str,
         new_name: str | None = None,
         area_id: str | None = None,
-        layout: str | None = None,
         compartments: int | None = None,
     ) -> None:
         shelf = next((s for s in self.snapshot.get("shelves", []) if s["name"].lower() == name.lower()), None)
@@ -194,7 +193,7 @@ class BgRegal:
             raise ServiceValidationError(f"Den Bereich „{area_id}“ gibt es nicht")
         if new_name is not None and not new_name.strip():
             raise ServiceValidationError("Der neue Name darf nicht leer sein")
-        await self._run(self.store.set_shelf, name, new_name, area_id, layout, compartments)
+        await self._run(self.store.set_shelf, name, new_name, area_id, compartments)
         if area_id is not None:
             device = self.shelf_device(new_name or name)
             if device is not None:

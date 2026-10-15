@@ -12,7 +12,6 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .core.store import LAYOUTS
 from .core.suggest import DISLIKE_OPTIONS, GAME_TYPES, MODES
 from .runtime import BgRegal
 
@@ -42,7 +41,6 @@ SCHEMAS: dict[str, vol.Schema] = {
             vol.Required("name"): cv.string,
             vol.Optional("new_name"): cv.string,
             vol.Optional("area_id"): vol.Any(None, cv.string),
-            vol.Optional("layout"): vol.In(LAYOUTS),
             vol.Optional("compartments"): vol.All(vol.Coerce(int), vol.Range(min=0, max=50)),
         }
     ),
@@ -157,7 +155,7 @@ async def _handle(regal: BgRegal, service: str, d: dict[str, Any]) -> dict[str, 
         case "set_shelf":
             await regal.async_set_shelf(
                 d["name"], d.get("new_name"), d.get("area_id") if "area_id" in d else None,
-                d.get("layout"), d.get("compartments"),
+                d.get("compartments"),
             )
         case "remove_shelf":
             await regal.async_remove_shelf(d["name"])

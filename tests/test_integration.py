@@ -235,11 +235,11 @@ async def test_shelf_device_in_room(hass: HomeAssistant, regal) -> None:
     assert state.state == "1" and state.attributes["games"] == ["Catan"]
 
     await hass.services.async_call(
-        DOMAIN, "set_shelf", {"name": "billy", "area_id": area.id, "layout": "stacked", "compartments": 5}, blocking=True
+        DOMAIN, "set_shelf", {"name": "billy", "area_id": area.id, "compartments": 5}, blocking=True
     )
     device = regal.shelf_device("Billy")
     assert device.area_id == area.id and device.name == "Billy"
-    assert hass.states.get("sensor.bgregal_regal_billy").attributes["layout"] == "stacked"
+    assert hass.states.get("sensor.bgregal_regal_billy").attributes["compartments"] == 5
 
     # Raum in Home Assistant am Gerät ändern -> BGRegal übernimmt ihn
     kueche = ar.async_get(hass).async_create("Küche")

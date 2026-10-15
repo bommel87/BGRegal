@@ -22,12 +22,11 @@ from .parser import (
 _LOGGER = logging.getLogger(__name__)
 
 API_BASE = "https://boardgamegeek.com/xmlapi2"
-USER_AGENT = "HomeAssistant-BGRegal/0.2.0"
+USER_AGENT = "HomeAssistant-BGRegal/0.2.1"
 MAX_ATTEMPTS = 8
 RETRY_DELAY = 5  # Sekunden; BGG antwortet bei Sammlungen zuerst oft mit 202
 THING_BATCH_SIZE = 20  # BGG erlaubt höchstens 20 IDs pro /thing
 REQUEST_GAP = 2  # Sekunden Pause zwischen Folgeabfragen, schont das Rate-Limit
-MAX_IMAGE_BYTES = 2_000_000  # Cover-Vorschauen sind klein; alles darüber wird ignoriert
 
 
 class BggClient:
@@ -105,21 +104,6 @@ class BggClient:
                 )
             )
         return result
-
-    async def fetch_image(self, url: str) -> bytes | None:
-        """Cover-Vorschau für die Farbberechnung; Fehler -> None (nächster Sync versucht es erneut)."""
-        if not url.startswith("https://"):
-            return None
-        try:
-            async with self._session.get(
-                url, headers={"User-Agent": USER_AGENT}, timeout=aiohttp.ClientTimeout(total=20)
-            ) as resp:
-                if resp.status != 200 or (resp.content_length or 0) > MAX_IMAGE_BYTES:
-                    return None
-                data = await resp.read()
-                return data if len(data) <= MAX_IMAGE_BYTES else None
-        except (aiohttp.ClientError, TimeoutError):
-            return None
 
     async def fetch_plays(self, page: int) -> tuple[int, list[Play]]:
         """Eine Seite eigener Partien (100 je Seite, neueste zuerst)."""

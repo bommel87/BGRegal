@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS game_meta (
 CREATE TABLE IF NOT EXISTS shelves (
     name TEXT PRIMARY KEY COLLATE NOCASE,
     area_id TEXT NOT NULL DEFAULT '',
-    layout TEXT NOT NULL DEFAULT 'upright',
+    layout TEXT NOT NULL DEFAULT 'upright',  -- aus 0.2.0, ungenutzt
     compartments INTEGER
 );
 CREATE TABLE IF NOT EXISTS loans (
@@ -153,7 +153,6 @@ COLUMNS: tuple[tuple[str, str, str], ...] = (
 )
 
 META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean")
-LAYOUTS = ("upright", "stacked")
 
 
 class Store:
@@ -369,7 +368,8 @@ class Store:
         for g in rows:
             for key in ("languages", "game_types", "base_ids"):
                 g[key] = json.loads(g[key] or "[]")
-            g.pop("color_src", None)
+            g.pop("color_src", None)  # Spalten aus 0.2.0, werden nicht mehr genutzt
+            g.pop("color", None)
             for key in ("shelf", "nfc_tag", "light_profile", "playlist", "manual_url", "ean"):
                 g[key] = g[key] or ""
             g["in_base"] = bool(g["in_base"])
@@ -401,18 +401,6 @@ class Store:
         rows = self._rows("SELECT bgg_id FROM game_meta WHERE ean != '' AND ean = ?", (ean,))
         return rows[0]["bgg_id"] if rows else None
 
-    # ---- Cover-Farben ------------------------------------------------------
-    def ids_needing_color(self) -> list[tuple[int, str]]:
-        """Spiele, deren Farbe fehlt oder deren Cover sich geändert hat: [(bgg_id, thumbnail)]."""
-        rows = self._rows(
-            """SELECT bgg_id, thumbnail FROM games
-               WHERE thumbnail IS NOT NULL AND (color_src IS NULL OR color_src != thumbnail)"""
-        )
-        return [(r["bgg_id"], r["thumbnail"]) for r in rows]
-
-    def set_color(self, bgg_id: int, color: str | None, source: str) -> None:
-        self._write("UPDATE games SET color = ?, color_src = ? WHERE bgg_id = ?", (color, source, bgg_id))
-
     # ---- Regale ------------------------------------------------------------
     def shelves(self) -> list[dict[str, Any]]:
         """Alle Regale: aus den Standorten der Spiele plus angelegte ohne Spiele."""
@@ -432,7 +420,6 @@ class Store:
         for key, entry in result.items():
             s = settings.get(key, {})
             entry["area_id"] = s.get("area_id") or ""
-            entry["layout"] = s.get("layout") or "upright"
             entry["compartments"] = max(s.get("compartments") or 0, entry["max_compartment"]) or 1
         return sorted(result.values(), key=lambda e: e["name"].lower())
 
@@ -441,17 +428,14 @@ class Store:
         name: str,
         new_name: str | None = None,
         area_id: str | None = None,
-        layout: str | None = None,
         compartments: int | None = None,
     ) -> None:
         """Einstellungen eines Regals; `new_name` benennt es um (auch bei allen Spielen darin)."""
         with self._lock, self._db:
             row = self._db.execute("SELECT * FROM shelves WHERE name = ?", (name,)).fetchone()
-            current = dict(row) if row else {"area_id": "", "layout": "upright", "compartments": None}
+            current = dict(row) if row else {"area_id": "", "compartments": None}
             if area_id is not None:
                 current["area_id"] = area_id
-            if layout is not None:
-                current["layout"] = layout
             if compartments is not None:
                 current["compartments"] = compartments or None
             target = (new_name or name).strip()
@@ -461,8 +445,8 @@ class Store:
                 )
             self._db.execute("DELETE FROM shelves WHERE name = ?", (name,))
             self._db.execute(
-                "INSERT OR REPLACE INTO shelves (name, area_id, layout, compartments) VALUES (?, ?, ?, ?)",
-                (target, current["area_id"], current["layout"], current["compartments"]),
+                "INSERT OR REPLACE INTO shelves (name, area_id, compartments) VALUES (?, ?, ?)",
+                (target, current["area_id"], current["compartments"]),
             )
 
     def remove_shelf(self, name: str) -> bool:

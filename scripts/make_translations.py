@@ -42,12 +42,11 @@ SERVICES = {
     "scan_code": ("Scan code", "Barcode (EAN) or tag scanned: starts or ends the session like an NFC tag; unknown codes are reported.",
                   "Code gescannt", "Barcode (EAN) oder Tag gescannt: startet oder beendet die Sitzung wie ein NFC-Tag; unbekannte Codes werden gemeldet.", {
         "code": ("Code", "Scanned EAN or tag ID.", "Code", "Gescannte EAN oder Tag-ID.")}),
-    "set_shelf": ("Set shelf", "Room, display, compartments or a new name for a shelf.",
-                  "Regal einstellen", "Raum, Darstellung, Fächer oder neuer Name eines Regals.", {
+    "set_shelf": ("Set shelf", "Room, compartments or a new name for a shelf.",
+                  "Regal einstellen", "Raum, Fächer oder neuer Name eines Regals.", {
         "name": ("Shelf", "Current name of the shelf.", "Regal", "Bisheriger Name des Regals."),
         "new_name": ("New name", "Renames the shelf for all games in it.", "Neuer Name", "Benennt das Regal bei allen Spielen darin um."),
         "area_id": ("Room", "Home Assistant area of the shelf (empty = none).", "Raum", "Bereich des Regals in Home Assistant (leer = keiner)."),
-        "layout": ("Display", "Boxes standing upright or lying stacked.", "Darstellung", "Kartons stehend oder liegend gestapelt."),
         "compartments": ("Compartments", "Number of compartments shown (0 = as used).", "Fächer", "Anzahl der angezeigten Fächer (0 = wie belegt)."),
     }),
     "remove_shelf": ("Remove shelf", "Removes an empty shelf.", "Regal entfernen", "Entfernt ein leeres Regal.", {
@@ -141,7 +140,6 @@ SELECTORS = {
                   "party": ("Party", "Party"), "abstract": ("Abstract", "Abstrakt"), "thematic": ("Thematic", "Thematisch"),
                   "wargame": ("Wargame", "Kriegsspiel"), "children": ("Children", "Kinder")},
 }
-SELECTORS["layout"] = {"upright": ("Upright", "Stehend"), "stacked": ("Stacked", "Liegend")}
 SELECTORS["dislike"] = {k: v for k, v in {**SELECTORS["mode"], **SELECTORS["game_type"]}.items() if k != "any"}
 
 CONFIG = {

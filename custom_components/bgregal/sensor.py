@@ -230,7 +230,7 @@ class ShelfSensor(CoordinatorEntity, SensorEntity):
             g["name"] for g in self.coordinator.regal.snapshot.get("games", [])
             if g["shelf"].lower() == self._key and not (g["expansion"] and g["in_base"])
         ]
-        return {"compartments": shelf["compartments"], "layout": shelf["layout"], "games": games[:LIST_LIMIT]}
+        return {"compartments": shelf["compartments"], "games": games[:LIST_LIMIT]}
 
 
 class BgRegalSensor(BgRegalEntity, SensorEntity):

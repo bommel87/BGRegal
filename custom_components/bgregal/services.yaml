@@ -71,13 +71,6 @@ set_shelf:
     area_id:
       selector:
         area:
-    layout:
-      selector:
-        select:
-          translation_key: layout
-          options:
-            - upright
-            - stacked
     compartments:
       selector:
         number:

@@ -37,7 +37,7 @@ und Spieleabende.
 
 | Bereich | Inhalt |
 | --- | --- |
-| **Regal** | Übersicht aller Regale nach Raum; ein Regal zeigt die Kartons von der Seite (stehend oder liegend). Suche und Filter über alle Regale. |
+| **Regal** | Regale nach Raum gruppiert, Fächer mit allen Schachteln. Suche und Filter heben Treffer hervor, statt Spiele auszublenden. |
 | **Spiel-Fenster** | Infos, letzte Partien, Erweiterungen; Standort, NFC-Tag, EAN, Licht, Sound, Anleitung; verleihen; Sitzung starten |
 | **Sitzung** | Laufzeit, Runde, wer am Zug ist; danach Mitspieler, Punkte, Gewinner und QR-Code für BG Stats |
 | **Vorschlag** | Filter nach Spielerzahl, Modus, Typ, Dauer und Anwesenden; Ja/Nein; Standort |
@@ -53,16 +53,15 @@ und Spieleabende.
 Regal und Fach trägst du im Spiel-Fenster ein. Fach 1 ist das oberste. Eine Erweiterung kann „im Basisspiel“ liegen;
 dann steht sie nicht extra im Regal, sondern zählt beim Basisspiel mit.
 
-Die Übersicht zeigt alle Regale nach Raum gruppiert. Unter **Regal einstellen** legst du fest:
+Die Regale stehen nach Raum gruppiert untereinander. Unter **Regal einstellen** legst du fest:
 
 - **Raum:** ein Bereich aus Home Assistant. Jedes Regal ist ein eigenes Gerät in diesem Raum, mit einem Sensor für die
   Zahl der Spiele. Änderst du den Raum am Gerät in Home Assistant, übernimmt BGRegal ihn.
-- **Darstellung:** stehend (Kartonrücken nebeneinander) oder liegend (gestapelt).
 - **Fächer:** wie viele Fächer das Regal hat, auch leere.
 - **Name:** Umbenennen ändert den Standort aller Spiele darin.
 
-Die Kartons zeigt BGRegal von der Seite: Dicke und Höhe aus den Kartonmaßen deiner Ausgabe auf BGG (sonst
-Standardmaße), Farbe aus dem Cover. Ein gelber Punkt heißt verliehen, ein weißer nie gespielt.
+Suchst du ein Spiel oder wählst einen Filter, bleiben alle Regale sichtbar: Treffer bekommen einen farbigen Rahmen,
+alles andere wird blass, und die Ansicht springt zum ersten Treffer.
 
 ### NFC
 
@@ -114,7 +113,7 @@ Die Kachel zeigt Cover, Partienzahl, letzte Partie und Standort, dazu einen Star
 | `sensor.bgregal_verliehen` | Anzahl | Liste mit Person und Tagen |
 | `sensor.bgregal_neuheiten` | Anzahl neuer Erweiterungen | Liste |
 | `sensor.bgregal_letzter_sync` | Zeitpunkt | letzter Fehler |
-| `sensor.bgregal_regal_<name>` | Spiele im Regal | Fächer, Darstellung, Spiele; Gerät im Raum des Regals |
+| `sensor.bgregal_regal_<name>` | Spiele im Regal | Fächer, Spiele; Gerät im Raum des Regals |
 | `calendar.bgregal_spieleabende` | nächster Abend | Gäste |
 | `button.bgregal_sync` | – | – |
 
@@ -130,7 +129,7 @@ Alle Dienste liegen unter `bgregal.*`; ein Spiel gibst du mit `bgg_id` oder `nam
 | `sync_now` | sofort synchronisieren |
 | `set_game` | `shelf`, `compartment`, `in_base`, `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`; leer = löschen |
 | `scan_code` | gescannter Barcode oder Tag: Sitzung starten/beenden, sonst `unknown` |
-| `set_shelf` / `remove_shelf` | Regal: `area_id`, `layout` (`upright`/`stacked`), `compartments`, `new_name` |
+| `set_shelf` / `remove_shelf` | Regal: `area_id`, `compartments`, `new_name` |
 | `assign_scanned_tag` | zuletzt gescannten Tag zuordnen |
 | `lend_game` / `return_game` | verleihen (`borrower`) / zurück |
 | `start_session` / `end_session` / `cancel_session` | Sitzung; ohne Spiel startet der angenommene Vorschlag |

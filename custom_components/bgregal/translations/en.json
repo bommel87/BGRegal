@@ -117,12 +117,6 @@
         "children": "Children"
       }
     },
-    "layout": {
-      "options": {
-        "upright": "Upright",
-        "stacked": "Stacked"
-      }
-    },
     "dislike": {
       "options": {
         "cooperative": "Cooperative",
@@ -200,7 +194,7 @@
     },
     "set_shelf": {
       "name": "Set shelf",
-      "description": "Room, display, compartments or a new name for a shelf.",
+      "description": "Room, compartments or a new name for a shelf.",
       "fields": {
         "name": {
           "name": "Shelf",
@@ -213,10 +207,6 @@
         "area_id": {
           "name": "Room",
           "description": "Home Assistant area of the shelf (empty = none)."
-        },
-        "layout": {
-          "name": "Display",
-          "description": "Boxes standing upright or lying stacked."
         },
         "compartments": {
           "name": "Compartments",

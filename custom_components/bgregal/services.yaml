@@ -181,6 +181,9 @@ set_player:
             - thematic
             - wargame
             - children
+    hidden:
+      selector:
+        boolean:
 
 remove_player:
   fields:

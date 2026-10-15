@@ -14,7 +14,7 @@ from typing import Any
 
 from .parser import EXPANSION, CollectionItem, Play, ThingInfo
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS loans (
 CREATE TABLE IF NOT EXISTS players (
     name TEXT PRIMARY KEY COLLATE NOCASE,
     bgg_username TEXT NOT NULL DEFAULT '',
-    dislikes TEXT NOT NULL DEFAULT '[]'
+    dislikes TEXT NOT NULL DEFAULT '[]',
+    hidden INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS session (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -127,6 +128,11 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 """
 
+# Änderungen an bestehenden Datenbanken; neue Datenbanken entstehen direkt aus SCHEMA
+MIGRATIONS: dict[int, tuple[str, ...]] = {
+    2: ("ALTER TABLE players ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",),
+}
+
 META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url")
 
 
@@ -143,6 +149,11 @@ class Store:
             self._db.execute(
                 "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', ?)", (str(SCHEMA_VERSION),)
             )
+            current = int(self._db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0])
+            for version in range(current + 1, SCHEMA_VERSION + 1):
+                for sql in MIGRATIONS.get(version, ()):
+                    self._db.execute(sql)
+            self._db.execute("UPDATE meta SET value = ? WHERE key = 'schema'", (str(SCHEMA_VERSION),))
 
     def close(self) -> None:
         with self._lock:
@@ -402,7 +413,7 @@ class Store:
                 continue
             result[r["name"].lower()] = {
                 "name": r["name"], "bgg_username": r["username"] or "", "dislikes": [],
-                "plays": r["plays"], "from_bgg": True,
+                "plays": r["plays"], "from_bgg": True, "hidden": False,
             }
         for r in self._rows("SELECT * FROM players"):
             entry = result.setdefault(
@@ -410,11 +421,16 @@ class Store:
             )
             entry["bgg_username"] = r["bgg_username"] or entry.get("bgg_username", "")
             entry["dislikes"] = json.loads(r["dislikes"] or "[]")
+            entry["hidden"] = bool(r["hidden"])
         return sorted(result.values(), key=lambda p: (-p["plays"], p["name"].lower()))
 
-    def set_player(self, name: str, bgg_username: str | None, dislikes: list[str] | None) -> None:
+    def set_player(
+        self, name: str, bgg_username: str | None, dislikes: list[str] | None, hidden: bool | None = None
+    ) -> None:
         with self._lock, self._db:
             self._db.execute("INSERT OR IGNORE INTO players (name) VALUES (?)", (name,))
+            if hidden is not None:
+                self._db.execute("UPDATE players SET hidden = ? WHERE name = ?", (int(hidden), name))
             if bgg_username is not None:
                 self._db.execute(
                     "UPDATE players SET bgg_username = ? WHERE name = ?", (bgg_username, name)

@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.1.1";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.1.2";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -241,7 +241,7 @@ class BgRegalPanel extends HTMLElement {
     const loan = g.loan
       ? `<p>${t.lentTo} <b>${esc(g.loan.borrower)}</b> ${t.since} ${fmtDate(g.loan.since)}</p><button data-a="return" data-v="${g.bgg_id}">${t.giveBack}</button>`
       : `<div class="row"><input list="bgr-players" placeholder="${t.borrower}" value="${esc(ui.lendTo)}" data-k="lendTo"><button data-a="lend" data-v="${g.bgg_id}" ${ui.lendTo.trim() ? "" : "disabled"}>${t.lend}</button></div>
-         <datalist id="bgr-players">${this._data.players.map((p) => `<option value="${esc(p.name)}">`).join("")}</datalist>`;
+         <datalist id="bgr-players">${this._activePlayers().map((p) => `<option value="${esc(p.name)}">`).join("")}</datalist>`;
 
     return `<div class="overlay" data-a="close"><div class="dialog" role="dialog" aria-modal="true" data-stop="1">
       <button class="icon close" data-a="close" aria-label="${t.close}">✕</button>
@@ -303,7 +303,7 @@ class BgRegalPanel extends HTMLElement {
     if (s.state === "running") {
       const order = s.order || [];
       const current = order.length ? order[s.turn % order.length] : null;
-      const pool = [this._data.me, ...this._data.players.map((p) => p.name)];
+      const pool = [this._data.me, ...this._activePlayers().map((p) => p.name)];
       const editing = this._ui.order;
       return `<section class="card session">
         ${g.thumbnail ? `<img class="cover" src="${esc(g.thumbnail)}" alt="">` : ""}
@@ -334,7 +334,7 @@ class BgRegalPanel extends HTMLElement {
         <div class="row center"><button class="primary" data-a="showqr">${t.showQr}</button><button data-a="cancel">${t.done}</button></div></section>`;
     }
     const f = this._ensureFinish(s);
-    const pool = [this._data.me, ...this._data.players.map((p) => p.name)];
+    const pool = [this._data.me, ...this._activePlayers().map((p) => p.name)];
     for (const n of f.players) if (!pool.some((p) => p.toLowerCase() === n.toLowerCase())) pool.push(n);
     return `<section class="card session"><h2>${esc(s.name)}</h2>
       <div class="muted">${fmtDate(s.started, true)} · ${duration(s.started, s.ended)} ${t.min}</div>
@@ -368,7 +368,7 @@ class BgRegalPanel extends HTMLElement {
         <label>${t.type}${sel("game_type", ["any", "family", "strategy", "party", "abstract", "thematic", "wargame", "children"], { any: t.any, ...t.types })}</label>
         <label>${t.maxTime}${sel("max_playtime", ["", "30", "45", "60", "90", "120", "180"], { "": t.any, 30: "30 min", 45: "45 min", 60: "60 min", 90: "90 min", 120: "2 h", 180: "3 h" })}</label>
       </div>
-      ${this._data.players.length ? `<h3>${t.attendees}</h3><div class="chips">${this._data.players.map((p) => `<button class="chip ${f.attendees.includes(p.name) ? "on" : ""}" data-a="att" data-v="${esc(p.name)}">${esc(p.name)}</button>`).join("")}</div>` : ""}
+      ${this._activePlayers().length ? `<h3>${t.attendees}</h3><div class="chips">${this._activePlayers().map((p) => `<button class="chip ${f.attendees.includes(p.name) ? "on" : ""}" data-a="att" data-v="${esc(p.name)}">${esc(p.name)}</button>`).join("")}</div>` : ""}
       <div class="row"><button class="primary" data-a="suggest">${t.suggestBtn}</button></div></section>`;
     let result = "";
     if (sug.phase === "suggested" || sug.phase === "accepted") {
@@ -414,7 +414,7 @@ class BgRegalPanel extends HTMLElement {
         <label>${t.title}<input value="${esc(ev.title)}" data-k="ev.title"></label>
         <label>${t.start}<input type="datetime-local" value="${esc(ev.start)}" data-k="ev.start"></label>
         <label>${t.maxTime}<input type="number" min="0" placeholder="${t.any}" value="${esc(ev.max_playtime)}" data-k="ev.max_playtime"></label></div>
-        <h3>${t.guests}</h3><div class="chips">${this._data.players.map((p) => `<button class="chip ${ev.guests.includes(p.name) ? "on" : ""}" data-a="evguest" data-v="${esc(p.name)}">${esc(p.name)}</button>`).join("")}</div>
+        <h3>${t.guests}</h3><div class="chips">${this._activePlayers().map((p) => `<button class="chip ${ev.guests.includes(p.name) ? "on" : ""}" data-a="evguest" data-v="${esc(p.name)}">${esc(p.name)}</button>`).join("")}</div>
         <div class="row"><input placeholder="+ ${t.name}" value="${esc(ev.newGuest)}" data-k="ev.newGuest"><button data-a="evaddguest" ${ev.newGuest.trim() ? "" : "disabled"}>${t.add}</button></div>
         <p class="muted small">${t.eveningHint}</p>
         <div class="row"><button class="primary" data-a="evcreate" ${ev.start ? "" : "disabled"}>${t.create}</button><button data-a="evcancel">${t.cancel}</button></div></section>`
@@ -422,9 +422,19 @@ class BgRegalPanel extends HTMLElement {
     return form + (cards || `<div class="empty">${t.noEvenings}</div>`);
   }
 
+  /** Mitspieler für Auswahllisten: ausgeblendete fehlen dort. */
+  _activePlayers() {
+    return this._data.players.filter((p) => !p.hidden);
+  }
+
   _view_players() {
     const t = this._t, edits = this._ui.playerEdit;
-    const rows = this._data.players.map((p) => {
+    const hidden = this._data.players.filter((p) => p.hidden);
+    const hiddenHtml = hidden.length ? `<details class="card hidden-players" ${this._ui.hiddenOpen ? "open" : ""}><summary data-a="hiddentoggle">${t.hiddenPlayers} (${hidden.length})</summary>
+      <p class="muted small">${t.hiddenHint}</p>
+      <ul class="hidden-list">${hidden.map((p) => `<li><span>${esc(p.name)}</span><span class="muted small">${p.plays} ${p.plays === 1 ? t.playOne : t.playsShort}</span>
+        <button data-a="plunhide" data-v="${esc(p.name)}">${t.unhide}</button></li>`).join("")}</ul></details>` : "";
+    const rows = this._activePlayers().map((p) => {
       const e = edits[p.name];
       const dislikes = (e ? e.dislikes : p.dislikes);
       return `<section class="card player">
@@ -435,12 +445,13 @@ class BgRegalPanel extends HTMLElement {
           <div class="row"><button class="primary" data-a="plsave" data-v="${esc(p.name)}">${t.save}</button><button data-a="plcancel" data-v="${esc(p.name)}">${t.cancel}</button>
           ${p.from_bgg ? "" : `<button class="danger" data-a="plremove" data-v="${esc(p.name)}">${t.remove}</button>`}</div>`
         : `<div>${dislikes.length ? `${t.dislikes}: ${dislikes.map((d) => esc(t.modes[d] || t.types[d])).join(", ")}` : `<span class="muted small">${t.noDislikes}</span>`}</div>
-          <button class="link" data-a="pledit" data-v="${esc(p.name)}">${t.edit}</button>`}
+          <div class="row"><button class="link" data-a="pledit" data-v="${esc(p.name)}">${t.edit}</button>
+          <button class="link muted" data-a="plhide" data-v="${esc(p.name)}">${t.hide}</button></div>`}
       </section>`;
     }).join("");
     return `<section class="card"><div class="row"><input placeholder="${t.newPlayer}" value="${esc(this._ui.newPlayer)}" data-k="newPlayer">
       <button class="primary" data-a="pladd" ${this._ui.newPlayer.trim() ? "" : "disabled"}>${t.add}</button></div>
-      <p class="muted small">${t.playersHint}</p></section>${rows || `<div class="empty">${t.noPlayers}</div>`}`;
+      <p class="muted small">${t.playersHint}</p></section>${rows || `<div class="empty">${t.noPlayers}</div>`}${hiddenHtml}`;
   }
 
   _view_stats() {
@@ -633,6 +644,11 @@ class BgRegalPanel extends HTMLElement {
         if (await this._call("set_player", { name: v, bgg_username: pe.bgg_username.trim(), dislikes: pe.dislikes })) delete ui.playerEdit[v];
         return;
       }
+      case "hiddentoggle": ui.hiddenOpen = !ui.hiddenOpen; break;
+      case "plhide": case "plunhide":
+        await this._call("set_player", { name: v, hidden: a === "plhide" });
+        if (a === "plhide") this._showToast(t.hiddenToast.replace("{name}", v));
+        return;
       case "plremove": if (confirm(t.confirmDelete)) { await this._call("remove_player", { name: v }); delete ui.playerEdit[v]; } return;
       case "dismissexp": await this._call("dismiss_expansions"); return;
       default: return;
@@ -784,6 +800,12 @@ const CSS = `
   ol.ranking li > * { margin-right: 8px; }
   .past { opacity: .6; }
   .phead { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
+  .player .row { margin: 4px 0 0; gap: 16px; }
+  button.link.muted { color: var(--secondary-text-color); }
+  .hidden-players summary { cursor: pointer; font-weight: 500; }
+  ul.hidden-list { list-style: none; padding: 0; margin: 8px 0 0; }
+  ul.hidden-list li { display: flex; gap: 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--divider-color); }
+  ul.hidden-list li span:first-child { flex: 1; }
   .bars { display: flex; gap: 6px; align-items: flex-end; height: 180px; padding-top: 16px; }
   .bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
   .bar .fill { width: 100%; max-width: 36px; background: var(--primary-color); border-radius: 4px 4px 0 0; min-height: 1px; }

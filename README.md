@@ -42,7 +42,7 @@ und Spieleabende.
 | **Sitzung** | Laufzeit, Runde, wer am Zug ist; danach Mitspieler, Punkte, Gewinner und QR-Code für BG Stats |
 | **Vorschlag** | Filter nach Spielerzahl, Modus, Typ, Dauer und Anwesenden; Ja/Nein; Standort |
 | **Spieleabende** | Termin, Gäste, Spiele zur Wahl, Abstimm-Link und QR-Code, Rangliste |
-| **Mitspieler** | aus deinen BGG-Partien plus selbst angelegte, mit BGG-Name und Vorlieben |
+| **Mitspieler** | aus deinen BGG-Partien plus selbst angelegte, mit BGG-Name und Vorlieben; ausblendbar |
 | **Statistik** | Partien pro Monat, meistgespielt, lange nicht gespielt, H-Index |
 | **Pile of Shame** | alle eigenen Spiele ohne eine einzige Partie |
 | **Wunschliste** | Wunschliste von BGG und neue Erweiterungen zu deinen Spielen |
@@ -110,7 +110,7 @@ Alle Dienste liegen unter `bgregal.*`; ein Spiel gibst du mit `bgg_id` oder `nam
 | `finish_session` | `players: [{name, score, winner}]`, `note` → Antwort mit `url` und `qr_svg` für BG Stats |
 | `session_qr` | Link und QR-Code der abgeschlossenen Sitzung |
 | `suggest` / `reject_suggestion` / `accept_suggestion` / `reset_suggestion` | Spielvorschlag |
-| `set_player` / `remove_player` | Mitspieler, `bgg_username`, `dislikes` |
+| `set_player` / `remove_player` | Mitspieler, `bgg_username`, `dislikes`, `hidden` |
 | `plan_evening` / `set_candidates` / `vote` / `remove_evening` / `evening_qr` | Spieleabende |
 | `dismiss_expansions` | neue Erweiterungen als gesehen markieren |
 

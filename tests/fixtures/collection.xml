@@ -14,6 +14,10 @@
       <item type="boardgameversion" id="555">
         <name type="primary" sortindex="1" value="German edition"/>
         <link type="language" id="2188" value="German"/>
+        <width value="11.6"/>
+        <length value="11.6"/>
+        <depth value="2.8"/>
+        <weight value="2.5"/>
       </item>
     </version>
   </item>

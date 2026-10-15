@@ -225,6 +225,59 @@ async def test_evening_public_vote(hass: HomeAssistant, regal, hass_client_no_au
     assert hass.states.get("calendar.bgregal_spieleabende").attributes["message"] == "Freitag"
 
 
+async def test_shelf_device_in_room(hass: HomeAssistant, regal) -> None:
+    from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+
+    area = ar.async_get(hass).async_create("Wohnzimmer")
+    await hass.services.async_call(DOMAIN, "set_game", {"bgg_id": 13, "shelf": "Billy", "compartment": 2}, blocking=True)
+    await hass.async_block_till_done()
+    state = hass.states.get("sensor.bgregal_regal_billy")
+    assert state.state == "1" and state.attributes["games"] == ["Catan"]
+
+    await hass.services.async_call(
+        DOMAIN, "set_shelf", {"name": "billy", "area_id": area.id, "layout": "stacked", "compartments": 5}, blocking=True
+    )
+    device = regal.shelf_device("Billy")
+    assert device.area_id == area.id and device.name == "Billy"
+    assert hass.states.get("sensor.bgregal_regal_billy").attributes["layout"] == "stacked"
+
+    # Raum in Home Assistant am Gerät ändern -> BGRegal übernimmt ihn
+    kueche = ar.async_get(hass).async_create("Küche")
+    dr.async_get(hass).async_update_device(device.id, area_id=kueche.id)
+    await regal.async_refresh()
+    await hass.async_block_till_done()
+    assert next(s for s in regal.snapshot["shelves"] if s["name"] == "Billy")["area_id"] == kueche.id
+
+    # Umbenennen: altes Gerät samt Sensor verschwindet, neues entsteht
+    await hass.services.async_call(DOMAIN, "set_shelf", {"name": "Billy", "new_name": "Billy 2"}, blocking=True)
+    await hass.async_block_till_done()
+    assert regal.find_game(13)["shelf"] == "Billy 2"
+    assert regal.shelf_device("Billy") is None
+    assert er.async_get(hass).async_get("sensor.bgregal_regal_billy") is None
+    assert hass.states.get("sensor.bgregal_regal_billy_2").state == "1"
+
+
+async def test_ean_scan(hass: HomeAssistant, regal) -> None:
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "set_game", {"bgg_id": 13, "ean": "123"}, blocking=True)
+    await hass.services.async_call(DOMAIN, "set_game", {"bgg_id": 13, "ean": "4002051-693602"}, blocking=True)
+    assert regal.find_game(13)["ean"] == "4002051693602"
+    with pytest.raises(ServiceValidationError):  # gleiche EAN bei anderem Spiel
+        await hass.services.async_call(DOMAIN, "set_game", {"bgg_id": 822, "ean": "4002051693602"}, blocking=True)
+
+    res = await hass.services.async_call(DOMAIN, "scan_code", {"code": "4002051693602"}, blocking=True, return_response=True)
+    assert res["result"] == "started" and res["name"] == "Catan"
+    assert hass.states.get("sensor.bgregal_sitzung").state == "running"
+    res = await hass.services.async_call(DOMAIN, "scan_code", {"code": "4002051693602"}, blocking=True, return_response=True)
+    assert res["result"] == "ended"
+
+    events = []
+    hass.bus.async_listen("bgregal_unknown_code", lambda e: events.append(e.data))
+    res = await hass.services.async_call(DOMAIN, "scan_code", {"code": "9999999999999"}, blocking=True, return_response=True)
+    await hass.async_block_till_done()
+    assert res == {"result": "unknown", "code": "9999999999999"} and events == [{"code": "9999999999999"}]
+
+
 async def test_unload(hass: HomeAssistant, regal) -> None:
     entry = regal.entry
     assert await hass.config_entries.async_unload(entry.entry_id)

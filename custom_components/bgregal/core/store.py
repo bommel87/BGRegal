@@ -14,7 +14,7 @@ from typing import Any
 
 from .parser import EXPANSION, CollectionItem, Play, ThingInfo
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
@@ -36,7 +36,12 @@ CREATE TABLE IF NOT EXISTS games (
     game_types TEXT NOT NULL DEFAULT '[]',
     mode TEXT,
     base_ids TEXT NOT NULL DEFAULT '[]',
-    info_updated TEXT
+    info_updated TEXT,
+    box_width REAL,
+    box_length REAL,
+    box_depth REAL,
+    color TEXT,
+    color_src TEXT
 );
 CREATE TABLE IF NOT EXISTS plays (
     play_id INTEGER PRIMARY KEY,
@@ -79,7 +84,14 @@ CREATE TABLE IF NOT EXISTS game_meta (
     nfc_tag TEXT NOT NULL DEFAULT '',
     light_profile TEXT NOT NULL DEFAULT '',
     playlist TEXT NOT NULL DEFAULT '',
-    manual_url TEXT NOT NULL DEFAULT ''
+    manual_url TEXT NOT NULL DEFAULT '',
+    ean TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS shelves (
+    name TEXT PRIMARY KEY COLLATE NOCASE,
+    area_id TEXT NOT NULL DEFAULT '',
+    layout TEXT NOT NULL DEFAULT 'upright',
+    compartments INTEGER
 );
 CREATE TABLE IF NOT EXISTS loans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,12 +140,20 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 """
 
-# Änderungen an bestehenden Datenbanken; neue Datenbanken entstehen direkt aus SCHEMA
-MIGRATIONS: dict[int, tuple[str, ...]] = {
-    2: ("ALTER TABLE players ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",),
-}
+# Neue Spalten für bestehende Datenbanken (Tabelle, Spalte, Definition); neue Datenbanken
+# entstehen direkt aus SCHEMA. Fehlt eine Spalte, wird sie ergänzt – unabhängig von der Version.
+COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("players", "hidden", "INTEGER NOT NULL DEFAULT 0"),  # Schema 2
+    ("games", "box_width", "REAL"),  # Schema 3
+    ("games", "box_length", "REAL"),
+    ("games", "box_depth", "REAL"),
+    ("games", "color", "TEXT"),
+    ("games", "color_src", "TEXT"),
+    ("game_meta", "ean", "TEXT NOT NULL DEFAULT ''"),
+)
 
-META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url")
+META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean")
+LAYOUTS = ("upright", "stacked")
 
 
 class Store:
@@ -149,10 +169,10 @@ class Store:
             self._db.execute(
                 "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', ?)", (str(SCHEMA_VERSION),)
             )
-            current = int(self._db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0])
-            for version in range(current + 1, SCHEMA_VERSION + 1):
-                for sql in MIGRATIONS.get(version, ()):
-                    self._db.execute(sql)
+            for table, column, definition in COLUMNS:
+                existing = {r[1] for r in self._db.execute(f"PRAGMA table_info({table})")}
+                if column not in existing:
+                    self._db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
             self._db.execute("UPDATE meta SET value = ? WHERE key = 'schema'", (str(SCHEMA_VERSION),))
 
     def close(self) -> None:
@@ -183,14 +203,16 @@ class Store:
             for i in items:
                 self._db.execute(
                     """INSERT INTO games (bgg_id, name, subtype, year, image, thumbnail, user_rating,
-                           version_name, languages)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           version_name, languages, box_width, box_length, box_depth)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT (bgg_id) DO UPDATE SET name = excluded.name,
                            subtype = excluded.subtype, year = excluded.year, image = excluded.image,
                            thumbnail = excluded.thumbnail, user_rating = excluded.user_rating,
-                           version_name = excluded.version_name, languages = excluded.languages""",
+                           version_name = excluded.version_name, languages = excluded.languages,
+                           box_width = excluded.box_width, box_length = excluded.box_length,
+                           box_depth = excluded.box_depth""",
                     (i.bgg_id, i.name, i.subtype, i.year, i.image, i.thumbnail, i.user_rating,
-                     i.version_name, json.dumps(i.languages)),
+                     i.version_name, json.dumps(i.languages), i.box_width, i.box_length, i.box_depth),
                 )
             if ids:
                 marks = ",".join("?" * len(ids))
@@ -324,7 +346,7 @@ class Store:
     def games(self) -> list[dict[str, Any]]:
         rows = self._rows(
             """SELECT g.*, m.shelf, m.compartment, m.in_base, m.nfc_tag, m.light_profile,
-                      m.playlist, m.manual_url,
+                      m.playlist, m.manual_url, m.ean,
                       COALESCE(s.plays, 0) AS plays, s.last_play
                FROM games g
                LEFT JOIN game_meta m ON m.bgg_id = g.bgg_id
@@ -347,7 +369,8 @@ class Store:
         for g in rows:
             for key in ("languages", "game_types", "base_ids"):
                 g[key] = json.loads(g[key] or "[]")
-            for key in ("shelf", "nfc_tag", "light_profile", "playlist", "manual_url"):
+            g.pop("color_src", None)
+            for key in ("shelf", "nfc_tag", "light_profile", "playlist", "manual_url", "ean"):
                 g[key] = g[key] or ""
             g["in_base"] = bool(g["in_base"])
             g["expansion"] = g["subtype"] == EXPANSION
@@ -373,6 +396,84 @@ class Store:
             "SELECT bgg_id FROM game_meta WHERE nfc_tag != '' AND lower(nfc_tag) = lower(?)", (tag,)
         )
         return rows[0]["bgg_id"] if rows else None
+
+    def game_by_ean(self, ean: str) -> int | None:
+        rows = self._rows("SELECT bgg_id FROM game_meta WHERE ean != '' AND ean = ?", (ean,))
+        return rows[0]["bgg_id"] if rows else None
+
+    # ---- Cover-Farben ------------------------------------------------------
+    def ids_needing_color(self) -> list[tuple[int, str]]:
+        """Spiele, deren Farbe fehlt oder deren Cover sich geändert hat: [(bgg_id, thumbnail)]."""
+        rows = self._rows(
+            """SELECT bgg_id, thumbnail FROM games
+               WHERE thumbnail IS NOT NULL AND (color_src IS NULL OR color_src != thumbnail)"""
+        )
+        return [(r["bgg_id"], r["thumbnail"]) for r in rows]
+
+    def set_color(self, bgg_id: int, color: str | None, source: str) -> None:
+        self._write("UPDATE games SET color = ?, color_src = ? WHERE bgg_id = ?", (color, source, bgg_id))
+
+    # ---- Regale ------------------------------------------------------------
+    def shelves(self) -> list[dict[str, Any]]:
+        """Alle Regale: aus den Standorten der Spiele plus angelegte ohne Spiele."""
+        used = self._rows(
+            f"""SELECT m.shelf AS name, COUNT(*) AS games, MAX(m.compartment) AS max_compartment
+                FROM game_meta m JOIN games g ON g.bgg_id = m.bgg_id
+                WHERE m.shelf != '' AND NOT (g.subtype = '{EXPANSION}' AND m.in_base = 1)
+                GROUP BY lower(m.shelf)"""
+        )
+        settings = {r["name"].lower(): r for r in self._rows("SELECT * FROM shelves")}
+        result: dict[str, dict[str, Any]] = {}
+        for r in used:
+            result[r["name"].lower()] = {"name": r["name"], "games": r["games"], "max_compartment": r["max_compartment"] or 0}
+        for key, r in settings.items():
+            entry = result.setdefault(key, {"name": r["name"], "games": 0, "max_compartment": 0})
+            entry["name"] = r["name"]
+        for key, entry in result.items():
+            s = settings.get(key, {})
+            entry["area_id"] = s.get("area_id") or ""
+            entry["layout"] = s.get("layout") or "upright"
+            entry["compartments"] = max(s.get("compartments") or 0, entry["max_compartment"]) or 1
+        return sorted(result.values(), key=lambda e: e["name"].lower())
+
+    def set_shelf(
+        self,
+        name: str,
+        new_name: str | None = None,
+        area_id: str | None = None,
+        layout: str | None = None,
+        compartments: int | None = None,
+    ) -> None:
+        """Einstellungen eines Regals; `new_name` benennt es um (auch bei allen Spielen darin)."""
+        with self._lock, self._db:
+            row = self._db.execute("SELECT * FROM shelves WHERE name = ?", (name,)).fetchone()
+            current = dict(row) if row else {"area_id": "", "layout": "upright", "compartments": None}
+            if area_id is not None:
+                current["area_id"] = area_id
+            if layout is not None:
+                current["layout"] = layout
+            if compartments is not None:
+                current["compartments"] = compartments or None
+            target = (new_name or name).strip()
+            if new_name:
+                self._db.execute(
+                    "UPDATE game_meta SET shelf = ? WHERE lower(shelf) = lower(?)", (target, name)
+                )
+            self._db.execute("DELETE FROM shelves WHERE name = ?", (name,))
+            self._db.execute(
+                "INSERT OR REPLACE INTO shelves (name, area_id, layout, compartments) VALUES (?, ?, ?, ?)",
+                (target, current["area_id"], current["layout"], current["compartments"]),
+            )
+
+    def remove_shelf(self, name: str) -> bool:
+        """Entfernt die Einstellungen eines leeren Regals."""
+        with self._lock, self._db:
+            in_use = self._db.execute(
+                "SELECT 1 FROM game_meta WHERE lower(shelf) = lower(?) LIMIT 1", (name,)
+            ).fetchone()
+            if in_use:
+                return False
+            return self._db.execute("DELETE FROM shelves WHERE name = ?", (name,)).rowcount > 0
 
     # ---- Verleih -----------------------------------------------------------
     def active_loans(self) -> list[dict[str, Any]]:

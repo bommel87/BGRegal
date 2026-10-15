@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "bgregal"
-VERSION = "0.1.2"
+VERSION = "0.2.0"
 
 CONF_USERNAME = "username"
 CONF_TOKEN = "token"
@@ -32,6 +32,7 @@ EVENT_SESSION_STARTED = "bgregal_session_started"
 EVENT_SESSION_ENDED = "bgregal_session_ended"
 EVENT_LOAN_OVERDUE = "bgregal_loan_overdue"
 EVENT_NEW_EXPANSION = "bgregal_new_expansion"
+EVENT_UNKNOWN_CODE = "bgregal_unknown_code"
 
 TAG_MAX_AGE_MIN = 10  # gescannter Tag gilt so lange für „Gescannten übernehmen“
 LOAN_REPEAT_DAYS = 30  # nach der ersten Erinnerung alle 30 Tage erneut

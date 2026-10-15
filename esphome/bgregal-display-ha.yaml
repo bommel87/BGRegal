@@ -1,0 +1,41 @@
+# BGRegal-Display für den ESPHome Device Builder in Home Assistant.
+# Hardware und Oberfläche kommen direkt aus GitHub (bommel87/BGRegal); hier steht nur, was zum Gerät gehört.
+#
+# WLAN: Hier stehen keine Zugangsdaten. Das Gerät nutzt das WLAN, das bei der Ersteinrichtung
+# (ESPHome Web / Improv) gespeichert wurde. Ohne gespeichertes WLAN öffnet es den Hotspot
+# „BGRegal Display“, über den man das WLAN einträgt.
+#
+# Danach in Home Assistant beim Gerät „Dem Gerät erlauben, Home-Assistant-Aktionen auszuführen“ aktivieren.
+
+substitutions:
+  name: bgregal-display
+  friendly_name: BGRegal Display
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+packages:
+  bgregal:
+    url: https://github.com/bommel87/BGRegal
+    ref: main
+    refresh: 1d
+    files:
+      - esphome/board.yaml
+      - esphome/hardware_waveshare_amoled.yaml
+      - esphome/ui.yaml
+
+api:
+  encryption:
+    key: !secret bgregal_display_api_key  # im Device Builder durch den eigenen Schlüssel ersetzen
+
+ota:
+  - platform: esphome
+
+wifi:
+  ap:
+    ssid: ${friendly_name}
+
+captive_portal:
+
+improv_serial:

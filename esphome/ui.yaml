@@ -5,6 +5,11 @@
 # Alle Elemente sind von der Mitte aus positioniert (align: CENTER + x/y) und so bemessen,
 # dass ihre Ecken im Kreis liegen. Schwarzer Hintergrund: schwarze Pixel sind auf AMOLED aus.
 
+# Entity-IDs von BGRegal (fest, sprachunabhängig); bei Bedarf im Gerät überschreiben
+substitutions:
+  suggestion_entity: sensor.bgregal_vorschlag
+  session_entity: sensor.bgregal_sitzung
+
 font:
   - file: "gfonts://Roboto"
     id: roboto_28

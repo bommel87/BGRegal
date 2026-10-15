@@ -8,10 +8,14 @@
 #
 # Stellt bereit, was ui.yaml erwartet:  main_display, main_touch
 
+# Touch-Treiber aus dem BGRegal-Repo (Ordner esphome/components), so muss nichts kopiert werden
 external_components:
   - source:
-      type: local
-      path: components
+      type: git
+      url: https://github.com/bommel87/BGRegal
+      ref: main
+      path: esphome/components
+    refresh: 1d
     components: [cst9217]
 
 esphome:

@@ -339,6 +339,10 @@
         "dislikes": {
           "name": "Mag nicht",
           "description": "Arten von Spielen, die dieser Mitspieler nicht mag."
+        },
+        "hidden": {
+          "name": "Ausgeblendet",
+          "description": "Mitspieler in Auswahllisten ausblenden; Partien und Statistik bleiben."
         }
       }
     },

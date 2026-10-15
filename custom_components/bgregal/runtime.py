@@ -461,7 +461,11 @@ class BgRegal:
 
     # ---- Mitspieler ----------------------------------------------------------
     async def async_set_player(
-        self, name: str, bgg_username: str | None, dislikes: list[str] | None
+        self,
+        name: str,
+        bgg_username: str | None,
+        dislikes: list[str] | None,
+        hidden: bool | None = None,
     ) -> None:
         name = name.strip()
         if not name:
@@ -480,7 +484,7 @@ class BgRegal:
             unknown = set(dislikes) - set(DISLIKE_OPTIONS)
             if unknown:
                 raise ServiceValidationError(f"Unbekannte Vorliebe: {', '.join(sorted(unknown))}")
-        await self._run(self.store.set_player, name, bgg_username, dislikes)
+        await self._run(self.store.set_player, name, bgg_username, dislikes, hidden)
         await self.async_refresh()
 
     async def async_remove_player(self, name: str) -> None:

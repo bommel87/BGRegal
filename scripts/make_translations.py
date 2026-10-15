@@ -75,6 +75,8 @@ SERVICES = {
         "name": ("Name", "Name of the player.", "Name", "Name des Mitspielers."),
         "bgg_username": ("BGG user", "BoardGameGeek user name (checked).", "BGG-Benutzer", "BoardGameGeek-Benutzername (wird geprüft)."),
         "dislikes": ("Dislikes", "Kinds of games this player does not like.", "Mag nicht", "Arten von Spielen, die dieser Mitspieler nicht mag."),
+        "hidden": ("Hidden", "Hide this player from selection lists; plays and stats stay.",
+                   "Ausgeblendet", "Mitspieler in Auswahllisten ausblenden; Partien und Statistik bleiben."),
     }),
     "remove_player": ("Remove player", "Removes a player you added yourself.", "Mitspieler entfernen", "Entfernt einen selbst angelegten Mitspieler.", {
         "name": ("Name", "Name of the player.", "Name", "Name des Mitspielers.")}),

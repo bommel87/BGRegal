@@ -339,6 +339,10 @@
         "dislikes": {
           "name": "Dislikes",
           "description": "Kinds of games this player does not like."
+        },
+        "hidden": {
+          "name": "Hidden",
+          "description": "Hide this player from selection lists; plays and stats stay."
         }
       }
     },

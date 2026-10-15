@@ -174,6 +174,10 @@ async def test_loans_and_players(hass: HomeAssistant, regal) -> None:
     anna = next(p for p in regal.snapshot["players"] if p["name"] == "Anna")
     assert anna["dislikes"] == ["cooperative"] and anna["plays"] == 1
 
+    await hass.services.async_call(DOMAIN, "set_player", {"name": "Anna", "hidden": True}, blocking=True)
+    anna = next(p for p in regal.snapshot["players"] if p["name"] == "Anna")
+    assert anna["hidden"] and anna["dislikes"] == ["cooperative"]  # Vorlieben bleiben erhalten
+
 
 async def test_websocket_data(hass: HomeAssistant, regal, hass_ws_client) -> None:
     client = await hass_ws_client(hass)

@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -134,6 +135,39 @@ def test_players_and_evenings(store):
     store.set_candidates(eid, [])
     assert store.evening(eid)["votes"] == {}
     assert store.remove_evening(eid) and store.evenings() == []
+
+
+def test_hide_player(store):
+    asyncio.run(run_sync(FakeClient(), store, direct, NOW))
+    store.set_player("Anna", None, None, hidden=True)  # Anna stammt aus den BGG-Partien
+    anna = next(p for p in store.players("susi") if p["name"] == "Anna")
+    assert anna["hidden"] and anna["plays"] == 1 and anna["from_bgg"]
+    store.set_player("Anna", None, None, hidden=False)
+    assert not next(p for p in store.players("susi") if p["name"] == "Anna")["hidden"]
+
+
+def test_migrates_schema_1(tmp_path):
+    """Eine Datenbank aus Version 0.1.x (ohne Spalte hidden) wird beim Öffnen ergänzt."""
+    path = tmp_path / "alt.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE players (name TEXT PRIMARY KEY COLLATE NOCASE, bgg_username TEXT NOT NULL DEFAULT '',"
+        " dislikes TEXT NOT NULL DEFAULT '[]');"
+        "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);"
+        "INSERT INTO meta VALUES ('schema', '1'); INSERT INTO players (name) VALUES ('Ben');"
+    )
+    old.commit()
+    old.close()
+    s = Store(str(path))
+    try:
+        assert s.get_meta("schema") == "2"
+        assert s.players("susi") == [
+            {"name": "Ben", "plays": 0, "from_bgg": False, "bgg_username": "", "dislikes": [], "hidden": False}
+        ]
+        s.set_player("Ben", None, None, hidden=True)
+        assert s.players("susi")[0]["hidden"]
+    finally:
+        s.close()
 
 
 def test_session_roundtrip(store):

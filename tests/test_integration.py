@@ -278,6 +278,62 @@ async def test_ean_scan(hass: HomeAssistant, regal) -> None:
     assert res == {"result": "unknown", "code": "9999999999999"} and events == [{"code": "9999999999999"}]
 
 
+async def test_inventory(hass: HomeAssistant, regal) -> None:
+    call = lambda svc, data=None: hass.services.async_call(  # noqa: E731
+        DOMAIN, svc, data or {}, blocking=True, return_response=True
+    )
+    # Carcassonne steht laut BGRegal schon in Billy, Fach 1 – wird aber nicht gescannt
+    await hass.services.async_call(DOMAIN, "set_game", {"bgg_id": 822, "shelf": "Billy", "compartment": 1}, blocking=True)
+    await hass.services.async_call(DOMAIN, "set_game", {"bgg_id": 13, "ean": "4002051693602", "nfc_tag": "TAG1"}, blocking=True)
+
+    state = await call("start_inventory", {"shelf": "billy"})
+    assert state["shelf"] == "Billy" and state["compartment"] == 1
+    assert [g["name"] for g in state["missing"]] == ["Carcassonne"]
+
+    res = await call("scan_code", {"code": "4002051693602"})
+    assert res["result"] == "placed" and res["compartment"] == 1
+    assert hass.states.get("sensor.bgregal_sitzung").state == "idle"  # Inventur startet keine Sitzung
+    assert regal.find_game(13)["shelf"] == "Billy" and regal.find_game(13)["compartment"] == 1
+    assert (await call("scan_code", {"code": "4002051693602"}))["result"] == "already"
+
+    # Rückgängig stellt den alten Standort wieder her (vorher: keiner)
+    assert (await call("inventory_undo"))["undone"]["name"] == "Catan"
+    assert regal.find_game(13)["shelf"] == ""
+
+    # NFC-Tag aus der HA-App sortiert während der Inventur ein
+    hass.bus.async_fire("tag_scanned", {"tag_id": "TAG1"})
+    await hass.async_block_till_done()
+    assert regal.find_game(13)["compartment"] == 1
+    assert hass.states.get("sensor.bgregal_sitzung").state == "idle"
+
+    res = await call("inventory_next", {"clear_missing": True})
+    assert res["cleared"] == ["Carcassonne"] and res["inventory"]["compartment"] == 2
+    assert regal.find_game(822)["shelf"] == "" and regal.find_game(822)["compartment"] is None
+
+    await call("inventory_place", {"name": "Carcassonne"})
+    assert regal.find_game(822)["compartment"] == 2
+    assert (await call("stop_inventory"))["cleared"] == []
+    assert regal.inventory is None
+
+    # Nach dem Ende startet ein Scan wieder die Sitzung
+    assert (await call("scan_code", {"code": "4002051693602"}))["result"] == "started"
+
+
+async def test_inventory_times_out(hass: HomeAssistant, regal) -> None:
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    await hass.services.async_call(DOMAIN, "start_inventory", {"shelf": "Billy"}, blocking=True)
+    assert regal.inventory is not None
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=11))
+    await hass.async_block_till_done()
+    assert regal.inventory is None
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "inventory_undo", {}, blocking=True, return_response=True)
+
+
 async def test_unload(hass: HomeAssistant, regal) -> None:
     entry = regal.entry
     assert await hass.config_entries.async_unload(entry.entry_id)

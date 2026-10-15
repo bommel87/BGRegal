@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.2.1";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.3.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -64,6 +64,8 @@ class BgRegalPanel extends HTMLElement {
       this._data = await this._hass.callWS({ type: "bgregal/data" });
       this._error = null;
       this._games = new Map(this._data.games.map((g) => [g.bgg_id, g]));
+      // Inventur: Liste aktualisieren, auch wenn der Scan per NFC-Tag aus der HA-App kam
+      if (this._scan?.mode === "inventory") this._renderScan();
     } catch (err) {
       this._error = err.message || String(err);
     }
@@ -251,7 +253,8 @@ class BgRegalPanel extends HTMLElement {
     return toolbar
       + roomNames.map((room) => `<section class="room"><h2 class="roomname">${esc(room || t.noRoom)}</h2>${rooms.get(room).map(shelfHtml).join("")}</section>`).join("")
       + (unplaced.length ? `<section class="billy loose"><h2>${t.noLocation}</h2><div class="boxes">${unplaced.map(tile).join("")}</div></section>` : "")
-      + `<div class="row"><button data-a="newshelf">+ ${t.newShelf}</button></div>`;
+      + `<div class="row"><button data-a="newshelf">+ ${t.newShelf}</button>
+          <button data-a="inventory">${BARCODE_ICON} ${this._data.inventory ? t.invContinue : t.inventory}</button></div>`;
   }
 
   /** Ersten Treffer sichtbar machen, ohne das Suchfeld zu verlassen. */
@@ -586,6 +589,18 @@ class BgRegalPanel extends HTMLElement {
     if (k === "newPlayer") { ui.newPlayer = v; this._render(); return; }
     if (head === "edit") { ui.edit[rest[0]] = v; return; }
     if (head === "sh") { ui.shelfEdit[rest[0]] = v; if (rest[0] === "name") this._render(); return; }
+    if (k.startsWith("scan.form.") && this._scan) {
+      this._scan.form[k.slice(10)] = v;
+      const btn = this.shadowRoot.querySelector('[data-a="invbegin"]');
+      if (btn) btn.disabled = !String(this._scan.form.shelf).trim();
+      return;
+    }
+    if (k === "scan.addName" && this._scan) {
+      this._scan.addName = v;
+      const btn = this.shadowRoot.querySelector('[data-a="invadd"]');
+      if (btn) btn.disabled = !v.trim();
+      return;
+    }
     if (k === "scan.assign" && this._scan) {
       this._scan.assign = v;
       const btn = this.shadowRoot.querySelector('[data-a="scanassign"]');
@@ -644,7 +659,14 @@ class BgRegalPanel extends HTMLElement {
         return;
       case "scan": this._openScan("session"); return;
       case "scanean": this._openScan("ean"); return;
-      case "scanclose": this._closeScan(); return;
+      case "scanclose":
+        // Schließen während der Inventur = Fertig (mit Nachfrage zu nicht gescannten Spielen)
+        if (this._scan?.mode === "inventory" && this._data.inventory) await this._inventoryAction("done");
+        else this._closeScan();
+        return;
+      case "inventory": this._openScan("inventory"); return;
+      case "invbegin": case "invadd": case "invundo": case "invnext": case "invdone":
+        await this._inventoryAction(a.slice(3)); return;
       case "scanassign": await this._assignScanned(); return;
       case "open": return this._openGame(Number(v));
       case "close": ui.game = null; break;
@@ -753,18 +775,22 @@ class BgRegalPanel extends HTMLElement {
   }
 
   // ---- Scanner: Kamera (BarcodeDetector) oder Barcode-Scanner (tippt wie eine Tastatur) ----
-  /** mode "session": Code wie NFC-Tag behandeln; mode "ean": EAN ins Spiel-Fenster übernehmen. */
+  /** mode "session": Code wie NFC-Tag behandeln; "ean": EAN ins Spiel-Fenster übernehmen;
+   *  "inventory": Regal Fach für Fach durchscannen (Scans setzen den Standort). */
   _openScan(mode) {
     const t = this._t;
-    this._scan = { mode, result: null, assign: "", last: "", lastAt: 0 };
+    if (mode === "session" && this._data?.inventory) mode = "inventory"; // laufende Inventur weiterführen
+    const firstShelf = this._data?.shelves[0]?.name || "";
+    this._scan = { mode, result: null, assign: "", addName: "", last: "", lastAt: 0,
+                   form: { shelf: firstShelf, compartment: 1 } };
+    const title = { ean: t.scanEan, inventory: t.inventory }[mode] || t.scan;
     const box = this.shadowRoot.getElementById("scan");
     box.innerHTML = `<div class="overlay scan-overlay"><div class="dialog small-dialog" role="dialog" aria-modal="true">
       <button class="icon close" data-a="scanclose" aria-label="${t.close}">✕</button>
-      <h2>${mode === "ean" ? t.scanEan : t.scan}</h2>
+      <h2>${title}</h2>
       <div class="scanvideo" hidden><video playsinline muted></video><div class="aim"></div></div>
       <div id="scanbody"></div></div></div>`;
     this._renderScan();
-    this.shadowRoot.querySelector('[data-k="scan.code"]')?.focus();
     if (this._cameraSupported()) this._startCamera();
   }
 
@@ -776,9 +802,13 @@ class BgRegalPanel extends HTMLElement {
     const t = this._t, s = this._scan;
     const body = this.shadowRoot.getElementById("scanbody");
     if (!s || !body) return;
+    // Fokus merken: ein Barcode-Scanner tippt immer ins Code-Feld, außer man tippt gerade woanders
+    const focused = this.shadowRoot.activeElement?.dataset?.k;
     let result = "";
     const r = s.result;
-    if (r?.result === "started") result = `<p class="ok">▶ ${esc(r.name)} – ${t.scanStarted}</p>`;
+    if (r?.result === "placed") result = `<p class="ok">✓ ${esc(r.name)} → ${esc(r.shelf)}, ${t.compartment} ${r.compartment}</p>`;
+    else if (r?.result === "already") result = `<p class="muted">${t.invAlready.replace("{name}", esc(r.name))}</p>`;
+    else if (r?.result === "started") result = `<p class="ok">▶ ${esc(r.name)} – ${t.scanStarted}</p>`;
     else if (r?.result === "ended") result = `<p class="ok">■ ${esc(r.name)} – ${t.scanEnded}</p>`;
     else if (r?.result === "busy") result = `<p class="warn">${t.scanBusy.replace("{name}", esc(r.running || ""))}</p>`;
     else if (r?.result === "assigned") result = `<p class="ok">${t.scanAssigned.replace("{name}", esc(r.name))}</p>`;
@@ -788,10 +818,77 @@ class BgRegalPanel extends HTMLElement {
         <button class="primary" data-a="scanassign" ${s.assign.trim() ? "" : "disabled"}>${t.assign}</button></div>
         <datalist id="bgr-allgames">${this._data.games.filter((g) => !g.ean).map((g) => `<option value="${esc(g.name)}">`).join("")}</datalist>`;
     } else if (r?.error) result = `<p class="warn">${esc(r.error)}</p>`;
-    body.innerHTML = `
-      <p class="muted small">${this._cameraSupported() ? t.scanHintCamera : t.scanHintNoCamera}</p>
-      <label class="block">${t.scanCode}<input inputmode="numeric" autocomplete="off" data-k="scan.code" placeholder="${t.scanCodePlaceholder}"></label>
-      ${result}`;
+    const codeField = `<label class="block">${t.scanCode}<input inputmode="numeric" autocomplete="off" data-k="scan.code" placeholder="${t.scanCodePlaceholder}"></label>`;
+    const hint = `<p class="muted small">${this._cameraSupported() ? t.scanHintCamera : t.scanHintNoCamera}</p>`;
+    const inv = this._data.inventory;
+
+    if (s.mode === "inventory" && !inv) {
+      // Startformular: Regal (auch neu) und Startfach
+      this._toggleVideo(false);
+      body.innerHTML = `<p class="muted small">${t.invIntro}</p>
+        <div class="form"><label>${t.shelf}<input list="bgr-inv-shelves" value="${esc(s.form.shelf)}" data-k="scan.form.shelf"></label>
+        <label>${t.invStartCompartment}<input type="number" min="1" max="50" value="${esc(s.form.compartment)}" data-k="scan.form.compartment"></label></div>
+        <datalist id="bgr-inv-shelves">${this._data.shelves.map((x) => `<option value="${esc(x.name)}">`).join("")}</datalist>
+        <div class="row"><button class="primary" data-a="invbegin" ${s.form.shelf.trim() ? "" : "disabled"}>${t.invBegin}</button></div>`;
+      return;
+    }
+    if (s.mode === "inventory") {
+      this._toggleVideo(true);
+      const placed = inv.placed.map((g, i) => `<li>${i + 1}. ${esc(g.name)}</li>`).join("");
+      body.innerHTML = `<div class="invhead">${esc(inv.shelf)} · ${t.compartment} ${inv.compartment}</div>
+        ${hint}${codeField}${result}
+        <h3>${t.invPlaced.replace("{n}", inv.placed.length)}</h3>
+        ${placed ? `<ol class="invlist">${placed}</ol>` : `<p class="muted small">${t.invNothingYet}</p>`}
+        ${inv.missing.length ? `<p class="muted small">${t.invStillHere}: ${esc(inv.missing.map((g) => g.name).join(", "))}</p>` : ""}
+        <div class="row"><input list="bgr-inv-games" placeholder="${t.invAddByName}" value="${esc(s.addName)}" data-k="scan.addName">
+          <button data-a="invadd" ${s.addName.trim() ? "" : "disabled"}>${t.add}</button></div>
+        <datalist id="bgr-inv-games">${this._shelfGames().map((g) => `<option value="${esc(g.name)}">`).join("")}</datalist>
+        <div class="row"><button data-a="invundo" ${inv.placed.length ? "" : "disabled"}>${t.invUndo}</button>
+          <button class="primary" data-a="invnext">${t.invNext}</button>
+          <button data-a="invdone">${t.invDone}</button></div>`;
+    } else {
+      body.innerHTML = `${hint}${codeField}${result}`;
+    }
+    const keep = focused && focused !== "scan.code" ? this.shadowRoot.querySelector(`[data-k="${focused}"]`) : null;
+    (keep || this.shadowRoot.querySelector('[data-k="scan.code"]'))?.focus();
+  }
+
+  /** Kamerabild nur zeigen, wenn gerade gescannt wird (nicht im Startformular der Inventur). */
+  _toggleVideo(show) {
+    const wrap = this.shadowRoot.querySelector(".scanvideo");
+    if (wrap && this._stream) wrap.hidden = !show;
+  }
+
+  /** Nicht gescannte Spiele im aktuellen Fach: nachfragen, ob sie „ohne Standort“ werden. */
+  _askClearMissing() {
+    const inv = this._data.inventory;
+    if (!inv?.missing.length) return false;
+    const names = inv.missing.map((g) => g.name).join(", ");
+    return confirm(this._t.invAskClear.replace("{n}", inv.missing.length).replace("{names}", names));
+  }
+
+  async _inventoryAction(action) {
+    const s = this._scan, t = this._t;
+    if (action === "begin") {
+      const state = await this._call("start_inventory", { shelf: s.form.shelf.trim(), compartment: Number(s.form.compartment) || 1 }, true);
+      if (state) { s.result = null; await this._load(); }
+    } else if (action === "add") {
+      const game = this._shelfGames().find((g) => g.name.toLowerCase() === s.addName.trim().toLowerCase());
+      if (!game) { s.result = { error: t.noMatch }; this._renderScan(); return; }
+      const res = await this._call("inventory_place", { bgg_id: game.bgg_id }, true);
+      if (res) { s.result = res; s.addName = ""; }
+    } else if (action === "undo") {
+      await this._call("inventory_undo", {}, true);
+      s.result = null;
+    } else if (action === "next") {
+      const res = await this._call("inventory_next", { clear_missing: this._askClearMissing() }, true);
+      if (res) { s.result = null; if (res.cleared.length) this._showToast(t.invCleared.replace("{n}", res.cleared.length)); }
+    } else if (action === "done") {
+      const res = await this._call("stop_inventory", { clear_missing: this._askClearMissing() }, true);
+      if (res) { this._closeScan(); this._showToast(t.invFinished); }
+      return;
+    }
+    await this._load(); // zeigt Fach und Liste sofort aktuell
   }
 
   async _startCamera() {
@@ -850,7 +947,8 @@ class BgRegalPanel extends HTMLElement {
     if (!this._scan) return;
     s.result = res || null;
     s.assign = "";
-    this._renderScan();
+    if (s.mode === "inventory") await this._load();
+    else this._renderScan();
   }
 
   async _assignScanned() {
@@ -858,7 +956,11 @@ class BgRegalPanel extends HTMLElement {
     const game = this._data.games.find((g) => g.name.toLowerCase() === s.assign.trim().toLowerCase());
     if (!game) { s.result = { ...s.result, error: t.noMatch }; this._renderScan(); return; }
     if (await this._call("set_game", { bgg_id: game.bgg_id, ean: s.result.code })) {
-      s.result = { result: "assigned", name: game.name };
+      // In der Inventur kommt das Spiel nach dem Zuordnen gleich ins Fach
+      s.result = s.mode === "inventory" && this._data.inventory
+        ? await this._call("inventory_place", { bgg_id: game.bgg_id }, true)
+        : { result: "assigned", name: game.name };
+      s.assign = "";
       this._renderScan();
     }
   }
@@ -977,6 +1079,9 @@ const CSS = `
   .scan-overlay { z-index: 15; }
   p.ok { color: var(--success-color, #43a047); font-weight: 500; }
   p.warn { color: var(--error-color); }
+  .invhead { font-size: 22px; font-weight: 500; margin: 4px 0 8px; }
+  ol.invlist { margin: 0; padding-left: 0; list-style: none; max-height: 30vh; overflow-y: auto; }
+  ol.invlist li { padding: 3px 0; border-bottom: 1px solid var(--divider-color); font-size: 14px; }
   .fach { border-bottom: 6px solid var(--wood); padding: 8px 0 4px; margin-bottom: 8px; }
   .fnum { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 6px; }
   .boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }

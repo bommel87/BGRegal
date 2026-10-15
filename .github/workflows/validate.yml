@@ -33,3 +33,20 @@ jobs:
           python-version: "3.14"
       - run: pip install -r requirements_test.txt
       - run: pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: JavaScript-Syntax prüfen
+        run: |
+          for f in custom_components/bgregal/frontend/*.js; do
+            cp "$f" "$RUNNER_TEMP/check.mjs"
+            node --check "$RUNNER_TEMP/check.mjs" || { echo "Syntaxfehler in $f"; exit 1; }
+          done
+          # Inline-Skript der Abstimmseite
+          sed -n '/<script>/,/<\/script>/p' custom_components/bgregal/frontend/vote.html | sed '1d;$d' > "$RUNNER_TEMP/vote.mjs"
+          node --check "$RUNNER_TEMP/vote.mjs"

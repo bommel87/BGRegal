@@ -29,6 +29,7 @@ SCHEMAS: dict[str, vol.Schema] = {
             vol.Optional("shelf"): vol.Any(None, cv.string),
             vol.Optional("compartment"): vol.Any(None, "", vol.All(vol.Coerce(int), vol.Range(min=0, max=50))),
             vol.Optional("in_base"): cv.boolean,
+            vol.Optional("in_box"): vol.Any(None, "", vol.Coerce(int)),
             vol.Optional("nfc_tag"): vol.Any(None, cv.string),
             vol.Optional("light_profile"): vol.Any(None, cv.string),
             vol.Optional("playlist"): vol.Any(None, cv.string),

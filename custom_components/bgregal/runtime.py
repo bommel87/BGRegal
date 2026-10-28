@@ -312,8 +312,8 @@ class BgRegal:
         if "compartment" in fields:
             value = fields["compartment"]
             clean["compartment"] = int(value) if value not in (None, "", 0) else None
-        if "in_base" in fields:
-            clean["in_base"] = int(bool(fields["in_base"]))
+        if "in_box" in fields or "in_base" in fields:
+            clean["in_box"] = self._box_for(game, fields)
         if "playlist" in fields:
             try:
                 clean["playlist"] = normalize_playlist(fields["playlist"])
@@ -343,6 +343,31 @@ class BgRegal:
                     )
         await self._run(self.store.set_game_meta, game["bgg_id"], clean)
         await self.async_refresh()
+
+    def _box_for(self, game: dict[str, Any], fields: dict[str, Any]) -> int | None:
+        """Karton, in dem die Erweiterung liegen soll (BGG-ID) oder None für einen eigenen Platz.
+        `in_box` hat Vorrang; `in_base: true` ist die Kurzform für das erste Basisspiel der Sammlung."""
+        if "in_box" in fields:
+            box = fields["in_box"] or None
+        elif fields["in_base"]:
+            owned = {g["bgg_id"] for g in self.snapshot.get("games", [])}
+            box = next((b for b in game["base_ids"] if b in owned), None)
+            if box is None:
+                raise ServiceValidationError("Das Basisspiel ist nicht in der Sammlung")
+        else:
+            box = None if game.get("in_base") else game.get("in_box")
+        if box is None:
+            return None
+        if not game["expansion"]:
+            raise ServiceValidationError("Nur Erweiterungen können in einem anderen Karton liegen")
+        host = self.find_game(int(box))
+        if host["bgg_id"] == game["bgg_id"]:
+            raise ServiceValidationError("Ein Spiel kann nicht in seinem eigenen Karton liegen")
+        if host.get("in_box"):
+            raise ServiceValidationError(f"„{host['name']}“ liegt selbst in einem Karton")
+        if game.get("box_contents"):
+            raise ServiceValidationError(f"In „{game['name']}“ liegen andere Erweiterungen")
+        return host["bgg_id"]
 
     async def async_assign_scanned_tag(self, game: dict[str, Any]) -> str:
         if self._last_tag is None or dt_util.utcnow() - self._last_tag[1] > timedelta(
@@ -415,7 +440,7 @@ class BgRegal:
             {"bgg_id": g["bgg_id"], "name": g["name"]}
             for g in self.snapshot.get("games", [])
             if g["shelf"].lower() == inv["shelf"].lower() and g["compartment"] == inv["compartment"]
-            and g["bgg_id"] not in placed_ids and not (g["expansion"] and g["in_base"])
+            and g["bgg_id"] not in placed_ids and not g["in_box"]
         ]
         return {
             "shelf": inv["shelf"],
@@ -470,12 +495,12 @@ class BgRegal:
             return {**result, "result": "already"}
         inv["placed"].append({
             "bgg_id": game["bgg_id"], "name": game["name"], "shelf": game["shelf"],
-            "compartment": game["compartment"], "in_base": game["in_base"], "position": game.get("position"),
+            "compartment": game["compartment"], "in_box": game["in_box"], "position": game.get("position"),
         })
         await self._run(
             self.store.set_game_meta, game["bgg_id"],
             # Scan-Reihenfolge = Reihenfolge im Fach
-            {"shelf": inv["shelf"], "compartment": inv["compartment"], "in_base": 0,
+            {"shelf": inv["shelf"], "compartment": inv["compartment"], "in_box": None,
              "position": len(inv["placed"]) - 1},
         )
         await self.async_refresh()
@@ -489,7 +514,7 @@ class BgRegal:
         last = inv["placed"].pop()
         await self._run(
             self.store.set_game_meta, last["bgg_id"],
-            {"shelf": last["shelf"], "compartment": last["compartment"], "in_base": int(bool(last["in_base"])),
+            {"shelf": last["shelf"], "compartment": last["compartment"], "in_box": last["in_box"],
              "position": last.get("position")},
         )
         await self.async_refresh()

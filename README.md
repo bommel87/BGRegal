@@ -50,8 +50,11 @@ und Spieleabende.
 
 ### Regale und Räume
 
-Regal und Fach trägst du im Spiel-Fenster ein. Fach 1 ist das oberste. Eine Erweiterung kann „im Basisspiel“ liegen;
-dann steht sie nicht extra im Regal, sondern zählt beim Basisspiel mit.
+Regal und Fach trägst du im Spiel-Fenster ein. Fach 1 ist das oberste. Eine Erweiterung kann in einem Karton liegen,
+im eigenen Basisspiel oder in jedem anderen Spiel der Sammlung („Liegt im Karton von“). Dann steht sie nicht extra im
+Regal: Sie hat den Standort des Kartons und zieht mit um. Die Kachel des Kartons zeigt die Zahl der Erweiterungen, sein
+Spiel-Fenster listet sie, und die Suche nach der Erweiterung hebt den Karton hervor. Ein Karton, der selbst in einem
+Karton liegt, nimmt nichts auf.
 
 Die Regale stehen nach Raum gruppiert untereinander. Unter **Regal einstellen** legst du fest:
 
@@ -163,7 +166,7 @@ Alle Dienste liegen unter `bgregal.*`; ein Spiel gibst du mit `bgg_id` oder `nam
 | Dienst | Zweck |
 | --- | --- |
 | `sync_now` | sofort synchronisieren |
-| `set_game` | `shelf`, `compartment`, `in_base`, `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`, `links` (Liste aus `title` und `url`); leer = löschen |
+| `set_game` | `shelf`, `compartment`, `in_box` (BGG-ID des Kartons, leer = eigener Platz), `in_base` (Kurzform fürs Basisspiel), `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`, `links` (Liste aus `title` und `url`); leer = löschen |
 | `scan_code` | gescannter Barcode oder Tag: Sitzung starten/beenden, sonst `unknown` |
 | `set_shelf` / `remove_shelf` | Regal: `area_id`, `compartments`, `compartment_1_bottom`, `game_sort`, `new_name` |
 | `set_sort_order` | Reihenfolge: `kind` (`rooms`/`shelves`/`games`) und `order` |

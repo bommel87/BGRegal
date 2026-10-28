@@ -457,6 +457,41 @@ async def test_links_for_assist(hass: HomeAssistant, regal) -> None:
     assert getattr(listed, "data", listed)["games"] == ["Carcassonne"]
 
 
+async def test_expansion_in_foreign_box(hass: HomeAssistant, regal) -> None:
+    async def set_game(**data):
+        await hass.services.async_call(DOMAIN, "set_game", data, blocking=True)
+
+    await set_game(bgg_id=822, shelf="Billy", compartment=2)
+    await set_game(bgg_id=325, in_box=822)  # Seefahrer im Carcassonne-Karton
+    seafarers = regal.find_game(325)
+    assert seafarers["box_name"] == "Carcassonne" and seafarers["shelf"] == "Billy"
+    assert not seafarers["in_base"] and regal.find_game(822)["box_contents"] == [325]
+    shelf = next(s for s in regal.snapshot["shelves"] if s["name"] == "Billy")
+    assert shelf["games"] == 1
+
+    with pytest.raises(ServiceValidationError, match="Nur Erweiterungen"):
+        await set_game(bgg_id=13, in_box=822)
+    with pytest.raises(ServiceValidationError, match="eigenen Karton"):
+        await set_game(bgg_id=325, in_box=325)
+
+    await set_game(bgg_id=325, in_base=True)  # Kurzform: ins Basisspiel
+    assert regal.find_game(325)["in_box"] == 13
+    await set_game(bgg_id=325, in_base=False)
+    assert regal.find_game(325)["in_box"] is None
+    await set_game(bgg_id=325, in_box=822)
+    await set_game(bgg_id=325, in_box=0)
+    assert regal.find_game(325)["in_box"] is None
+
+    # Inventur: wer die Erweiterung im Fach scannt, nimmt sie aus dem Karton; Rückgängig legt sie zurück
+    await set_game(bgg_id=325, in_box=822)
+    await regal.async_start_inventory("Keller")
+    await regal.async_inventory_place(regal.find_game(325))
+    assert regal.find_game(325)["in_box"] is None and regal.find_game(325)["shelf"] == "Keller"
+    await regal.async_inventory_undo()
+    assert regal.find_game(325)["in_box"] == 822
+    await regal.async_stop_inventory(False)
+
+
 async def test_unload(hass: HomeAssistant, regal) -> None:
     entry = regal.entry
     assert await hass.config_entries.async_unload(entry.entry_id)

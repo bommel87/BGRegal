@@ -173,7 +173,11 @@
         },
         "in_base": {
           "name": "Liegt im Basisspiel",
-          "description": "Die Erweiterung liegt in der Schachtel des Basisspiels."
+          "description": "Kurzform: Die Erweiterung liegt in der Schachtel ihres Basisspiels."
+        },
+        "in_box": {
+          "name": "Liegt im Karton von",
+          "description": "BGG-ID des Spiels, in dessen Karton die Erweiterung liegt; leer = eigener Platz im Regal."
         },
         "nfc_tag": {
           "name": "NFC-Tag",

@@ -186,7 +186,7 @@ def test_migrates_schema_1(tmp_path):
     old.close()
     s = Store(str(path))
     try:
-        assert s.get_meta("schema") == "5"
+        assert s.get_meta("schema") == "6"
         assert s.players("susi") == [
             {"name": "Ben", "plays": 0, "from_bgg": False, "bgg_username": "", "dislikes": [], "hidden": False}
         ]
@@ -214,7 +214,7 @@ def test_box_size_kept_without_color(store):
 def test_shelves_and_ean(store):
     asyncio.run(run_sync(FakeClient(), store, direct, NOW))
     store.set_game_meta(13, {"shelf": "Billy", "compartment": 3, "ean": "4002051693602"})
-    store.set_game_meta(325, {"shelf": "Billy", "in_base": 1})  # liegt im Basisspiel, zählt nicht
+    store.set_game_meta(325, {"shelf": "Billy", "in_box": 13})  # liegt im Karton, zählt nicht
     store.set_shelf("Keller", area_id="keller")
     shelves = {s["name"]: s for s in store.shelves()}
     assert shelves["Billy"] == {"name": "Billy", "games": 1, "max_compartment": 3, "area_id": "", "compartments": 3,
@@ -228,6 +228,38 @@ def test_shelves_and_ean(store):
     assert billy["area_id"] == "wohnzimmer" and billy["compartments"] == 6
     assert not store.remove_shelf("Billy Wohnzimmer")  # noch Spiele darin
     assert store.remove_shelf("Keller")
+
+
+def test_expansion_in_box_inherits_location(store):
+    asyncio.run(run_sync(FakeClient(), store, direct, NOW))
+    store.set_game_meta(13, {"shelf": "Billy", "compartment": 3})
+    store.set_game_meta(325, {"shelf": "Keller", "compartment": 1, "in_box": 13})
+    seafarers, catan = store.game(325), store.game(13)
+    assert (seafarers["shelf"], seafarers["compartment"], seafarers["box_name"]) == ("Billy", 3, "Catan")
+    assert seafarers["in_base"] and catan["box_contents"] == [325]
+    # Karton zieht um, die Erweiterung mit
+    store.set_game_meta(13, {"shelf": "Flur", "compartment": 2})
+    assert (store.game(325)["shelf"], store.game(325)["compartment"]) == ("Flur", 2)
+    # Karton nicht (mehr) in der Sammlung oder kein Erweiterung: eigener Standort gilt
+    store.set_game_meta(325, {"in_box": 999})
+    assert store.game(325)["in_box"] is None and store.game(325)["shelf"] == "Keller"
+    store.set_game_meta(13, {"in_box": 325})  # Basisspiel kann nicht in einem Karton liegen
+    assert store.game(13)["in_box"] is None
+
+
+def test_migrates_in_base_to_box(tmp_path):
+    path = tmp_path / "v5.db"
+    s = Store(str(path))
+    asyncio.run(run_sync(FakeClient(), s, direct, NOW))
+    s._write("INSERT INTO game_meta (bgg_id, in_base) VALUES (325, 1)")
+    s._write("UPDATE meta SET value = '5' WHERE key = 'schema'")
+    s.close()
+    s = Store(str(path))
+    try:
+        assert s.get_meta("schema") == "6"
+        assert s.game(325)["in_box"] == 13 and s.game(13)["box_contents"] == [325]
+    finally:
+        s.close()
 
 
 def test_sort_orders(store):

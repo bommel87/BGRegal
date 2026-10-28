@@ -173,7 +173,11 @@
         },
         "in_base": {
           "name": "Stored in base game",
-          "description": "Expansion is kept in the base game box."
+          "description": "Short form: the expansion is kept in its base game box."
+        },
+        "in_box": {
+          "name": "Stored in box of",
+          "description": "BGG ID of the game whose box holds the expansion; empty = own place on the shelf."
         },
         "nfc_tag": {
           "name": "NFC tag",

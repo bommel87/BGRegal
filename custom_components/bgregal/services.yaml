@@ -27,6 +27,13 @@ set_game:
     in_base:
       selector:
         boolean:
+    in_box:
+      example: 13
+      selector:
+        number:
+          min: 0
+          max: 999999999
+          mode: box
     nfc_tag:
       selector:
         text:

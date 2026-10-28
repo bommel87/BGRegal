@@ -14,7 +14,7 @@ from typing import Any
 
 from .parser import EXPANSION, CollectionItem, Play, ThingInfo
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS game_meta (
     playlist TEXT NOT NULL DEFAULT '',
     manual_url TEXT NOT NULL DEFAULT '',
     ean TEXT NOT NULL DEFAULT '',
-    links TEXT NOT NULL DEFAULT '[]'
+    links TEXT NOT NULL DEFAULT '[]',
+    in_box INTEGER  -- BGG-ID des Kartons, in dem die Erweiterung liegt
 );
 CREATE TABLE IF NOT EXISTS shelves (
     name TEXT PRIMARY KEY COLLATE NOCASE,
@@ -156,12 +157,13 @@ COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("game_meta", "ean", "TEXT NOT NULL DEFAULT ''"),
     ("game_meta", "position", "INTEGER"),  # Schema 4: eigene Reihenfolge im Fach
     ("game_meta", "links", "TEXT NOT NULL DEFAULT '[]'"),  # Schema 5: Errata, FAQ, Almanach
+    ("game_meta", "in_box", "INTEGER"),  # Schema 6: Erweiterung in beliebigem Karton
     ("shelves", "position", "INTEGER"),
     ("shelves", "reversed", "INTEGER NOT NULL DEFAULT 0"),
     ("shelves", "game_sort", "TEXT NOT NULL DEFAULT 'name'"),
 )
 
-META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean", "position", "links")
+META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean", "position", "links", "in_box")
 GAME_SORTS = ("name", "plays", "last_play", "manual")
 
 
@@ -178,11 +180,25 @@ class Store:
             self._db.execute(
                 "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', ?)", (str(SCHEMA_VERSION),)
             )
+            old_version = int(self._db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0])
             for table, column, definition in COLUMNS:
                 existing = {r[1] for r in self._db.execute(f"PRAGMA table_info({table})")}
                 if column not in existing:
                     self._db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+            if old_version < 6:
+                self._migrate_in_base()
             self._db.execute("UPDATE meta SET value = ? WHERE key = 'schema'", (str(SCHEMA_VERSION),))
+
+    def _migrate_in_base(self) -> None:
+        """Schema 6: „Liegt im Basisspiel“ wird zu „Liegt im Karton von <erstes Basisspiel der Sammlung>“."""
+        owned = {r[0] for r in self._db.execute("SELECT bgg_id FROM games")}
+        rows = self._db.execute(
+            "SELECT m.bgg_id, g.base_ids FROM game_meta m JOIN games g ON g.bgg_id = m.bgg_id "
+            "WHERE m.in_base = 1 AND m.in_box IS NULL"
+        ).fetchall()
+        for bgg_id, base_ids in rows:
+            host = next((b for b in json.loads(base_ids or "[]") if b in owned), None)
+            self._db.execute("UPDATE game_meta SET in_box = ?, in_base = 0 WHERE bgg_id = ?", (host, bgg_id))
 
     def close(self) -> None:
         with self._lock:
@@ -355,7 +371,7 @@ class Store:
     def games(self) -> list[dict[str, Any]]:
         rows = self._rows(
             """SELECT g.*, m.shelf, m.compartment, m.in_base, m.nfc_tag, m.light_profile,
-                      m.playlist, m.manual_url, m.ean, m.position, m.links,
+                      m.playlist, m.manual_url, m.ean, m.position, m.links, m.in_box,
                       COALESCE(s.plays, 0) AS plays, s.last_play
                FROM games g
                LEFT JOIN game_meta m ON m.bgg_id = g.bgg_id
@@ -382,12 +398,25 @@ class Store:
             g.pop("color", None)
             for key in ("shelf", "nfc_tag", "light_profile", "playlist", "manual_url", "ean"):
                 g[key] = g[key] or ""
-            g["in_base"] = bool(g["in_base"])
             g["links"] = json.loads(g["links"] or "[]")
             g["expansion"] = g["subtype"] == EXPANSION
             g["last_players"] = players_by_play.get(last_ids.get(g["bgg_id"]), [])
             loan = loans.get(g["bgg_id"])
             g["loan"] = {"borrower": loan["borrower"], "since": loan["since"]} if loan else None
+            g["box_contents"] = []
+        # Erweiterungen in einem Karton übernehmen dessen Standort; fehlt der Karton, gilt der eigene
+        by_id = {g["bgg_id"]: g for g in rows}
+        for g in rows:
+            host = by_id.get(g["in_box"]) if g["in_box"] else None
+            if host is None or host is g or not g["expansion"]:
+                g["in_box"] = None
+        for g in rows:
+            if g["in_box"]:
+                host = by_id[g["in_box"]]
+                g["shelf"], g["compartment"] = host["shelf"], host["compartment"]
+                g["box_name"] = host["name"]
+                host["box_contents"].append(g["bgg_id"])
+            g["in_base"] = g["in_box"] in g["base_ids"]  # Kurzform aus 0.6, für Automationen
         return rows
 
     def game(self, bgg_id: int) -> dict[str, Any] | None:
@@ -418,7 +447,7 @@ class Store:
         used = self._rows(
             f"""SELECT m.shelf AS name, COUNT(*) AS games, MAX(m.compartment) AS max_compartment
                 FROM game_meta m JOIN games g ON g.bgg_id = m.bgg_id
-                WHERE m.shelf != '' AND NOT (g.subtype = '{EXPANSION}' AND m.in_base = 1)
+                WHERE m.shelf != '' AND NOT (g.subtype = '{EXPANSION}' AND m.in_box IN (SELECT bgg_id FROM games))
                 GROUP BY lower(m.shelf)"""
         )
         settings = {r["name"].lower(): r for r in self._rows("SELECT * FROM shelves")}

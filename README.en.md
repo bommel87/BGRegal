@@ -39,6 +39,9 @@ expansions, location, NFC tag, light, sound, rules link and rulebook PDFs, lendi
 players, scores, winner and a QR code for BG Stats), suggestions, game nights (guests, games, voting link and QR
 code, ranking), players (with BGG user and dislikes), stats, pile of shame, wishlist with new expansions, and loans.
 
+**Boxes:** an expansion can be stored in any box of your collection, not only its base game (*Stored in box of*).
+It then takes the box's location, the box tile shows the count, and searching for the expansion highlights the box.
+
 **NFC:** stick a tag on the box, scan it with the Home Assistant app and press **Use scanned tag** in the game
 dialog. Afterwards a scan starts the session (light profile and playlist), a second scan of the same tag ends it.
 

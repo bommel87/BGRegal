@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.6.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.7.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -173,7 +173,7 @@ class BgRegalPanel extends HTMLElement {
 
   _tile(g, extra = "", cls = "") {
     const t = this._t;
-    const exps = this._data.games.filter((e) => e.expansion && e.in_base && e.base_ids.includes(g.bgg_id)).length;
+    const exps = g.box_contents.length;
     const facts = [];
     facts.push(g.plays ? `${g.plays}×` : t.neverPlayed);
     if (g.last_play) facts.push(fmtDate(g.last_play));
@@ -191,9 +191,9 @@ class BgRegalPanel extends HTMLElement {
   }
 
   // ---- Regal ------------------------------------------------------------------
-  /** Spiele, die im Regal sichtbar stehen (Erweiterungen im Basisspiel zählen nicht extra). */
+  /** Spiele, die im Regal sichtbar stehen (Erweiterungen in einem Karton zählen nicht extra). */
   _shelfGames() {
-    return this._data.games.filter((g) => !(g.expansion && g.in_base));
+    return this._data.games.filter((g) => !g.in_box);
   }
 
   _areaName(areaId) {
@@ -258,13 +258,16 @@ class BgRegalPanel extends HTMLElement {
     const ui = this._ui;
     const q = ui.search.trim().toLowerCase();
     if (!q && ui.filter === "all") return null;
-    return new Set(this._shelfGames().filter((g) => {
+    const match = (g) => {
       if (q && !g.name.toLowerCase().includes(q)) return false;
       if (ui.filter === "lent") return !!g.loan;
       if (ui.filter === "nolocation") return !g.shelf;
       if (ui.filter === "expansions") return g.expansion;
       return true;
-    }).map((g) => g.bgg_id));
+    };
+    // Ein Karton ist auch Treffer, wenn eine Erweiterung darin passt
+    return new Set(this._shelfGames().filter((g) => match(g)
+      || g.box_contents.some((id) => this._games.has(id) && match(this._games.get(id)))).map((g) => g.bgg_id));
   }
 
   // Regal: nach Räumen gruppiert; Suche und Filter heben Treffer hervor, statt Spiele auszublenden
@@ -363,6 +366,13 @@ class BgRegalPanel extends HTMLElement {
     const shelves = this._data.shelves.map((s) => s.name);
     const profiles = Object.keys(this._hass.states).filter((id) => id.startsWith("scene.") || id.startsWith("script.")).sort();
     const rulebooks = this._rulebooks(g.bgg_id);
+    // Kartons für „Liegt im Karton von“: eigene Basisspiele zuerst, dann alle anderen (nicht selbst in einem Karton)
+    const boxes = g.expansion && !g.box_contents.length ? [
+      ...bases.filter((b) => !b.in_box),
+      ...this._data.games.filter((b) => b.bgg_id !== g.bgg_id && !b.in_box && !g.base_ids.includes(b.bgg_id)),
+    ] : [];
+    // Fremde Erweiterungen im Karton (die eigenen stehen schon unter „Erweiterungen“)
+    const contents = g.box_contents.map((id) => this._games.get(id)).filter((x) => x && !x.base_ids.includes(g.bgg_id));
     const facts = [];
     if (g.min_players && g.max_players) facts.push(g.min_players === g.max_players ? `${g.min_players} ${t.players}` : `${g.min_players}–${g.max_players} ${t.players}`);
     if (g.playing_time) facts.push(`${g.playing_time} ${t.min}`);
@@ -405,7 +415,8 @@ class BgRegalPanel extends HTMLElement {
         <label>${t.shelf}<input list="bgr-shelves" value="${esc(e.shelf)}" data-k="edit.shelf"></label>
         <datalist id="bgr-shelves">${shelves.map((s) => `<option value="${esc(s)}">`).join("")}</datalist>
         <label>${t.compartment}<input type="number" min="0" max="50" value="${esc(e.compartment)}" data-k="edit.compartment"></label>
-        ${g.expansion ? `<label class="check"><input type="checkbox" ${e.in_base ? "checked" : ""} data-k="edit.in_base">${t.inBase}</label>` : ""}
+        ${g.expansion ? `<label>${t.inBox}<select data-k="edit.in_box"><option value="">${t.ownPlace}</option>${boxes.map((b) =>
+          `<option value="${b.bgg_id}" ${String(b.bgg_id) === String(e.in_box) ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></label>` : ""}
         <label>${t.nfc}<span class="row"><input value="${esc(e.nfc_tag)}" data-k="edit.nfc_tag"><button data-a="scanned" data-v="${g.bgg_id}">${t.takeScanned}</button></span></label>
         <label>${t.ean}<span class="row"><input inputmode="numeric" placeholder="4002051693602" value="${esc(e.ean)}" data-k="edit.ean"><button data-a="scanean" title="${t.scanEan}">${BARCODE_ICON}</button></span></label>
         <label>${t.light}<select data-k="edit.light_profile"><option value="">–</option>${profiles.map((p) => `<option value="${esc(p)}" ${p === e.light_profile ? "selected" : ""}>${esc(this._hass.states[p].attributes.friendly_name || p)}</option>`).join("")}</select></label>
@@ -429,7 +440,8 @@ class BgRegalPanel extends HTMLElement {
       <p class="muted small">${t.linksHint}</p>
 
       <h3>${t.loan}</h3>${loan}
-      ${expansions.length ? `<h3>${t.expansions}</h3><ul class="plain">${expansions.map((x) => `<li><a href="#" data-a="open" data-v="${x.bgg_id}">${esc(x.name)}</a> <span class="muted small">${x.in_base ? t.inBaseShort : esc(location(x, t))}</span></li>`).join("")}</ul>` : ""}
+      ${expansions.length ? `<h3>${t.expansions}</h3><ul class="plain">${expansions.map((x) => `<li><a href="#" data-a="open" data-v="${x.bgg_id}">${esc(x.name)}</a> <span class="muted small">${x.in_box ? `${t.inBoxShort} ${esc(x.box_name)}` : esc(location(x, t))}</span></li>`).join("")}</ul>` : ""}
+      ${contents.length ? `<h3>${t.boxContents}</h3><ul class="plain">${contents.map((x) => `<li><a href="#" data-a="open" data-v="${x.bgg_id}">${esc(x.name)}</a></li>`).join("")}</ul>` : ""}
       <h3>${t.recentPlays}</h3>${plays}
     </div></div>`;
   }
@@ -777,9 +789,10 @@ class BgRegalPanel extends HTMLElement {
         const ed = ui.edit;
         const ok = await this._call("set_game", {
           bgg_id: Number(v), shelf: ed.shelf, compartment: ed.compartment === "" ? 0 : Number(ed.compartment),
-          in_base: !!ed.in_base, nfc_tag: ed.nfc_tag, light_profile: ed.light_profile, playlist: ed.playlist,
+          nfc_tag: ed.nfc_tag, light_profile: ed.light_profile, playlist: ed.playlist,
           manual_url: ed.manual_url, ean: ed.ean,
           links: ed.links.filter((l) => l.url.trim()).map((l) => ({ title: l.title.trim(), url: l.url.trim() })),
+          ...(this._games.get(Number(v))?.expansion ? { in_box: ed.in_box ? Number(ed.in_box) : 0 } : {}),
         });
         if (ok) this._showToast(t.saved);
         return;
@@ -1115,7 +1128,7 @@ class BgRegalPanel extends HTMLElement {
     this._ui.gamePlays = null;
     this._ui.lendTo = "";
     this._ui.edit = {
-      shelf: g.shelf, compartment: g.compartment ?? "", in_base: g.in_base, nfc_tag: g.nfc_tag,
+      shelf: g.shelf, compartment: g.compartment ?? "", in_box: g.in_box || "", nfc_tag: g.nfc_tag,
       light_profile: g.light_profile, playlist: g.playlist, manual_url: g.manual_url, ean: g.ean,
       links: g.links.map((l) => ({ ...l })),
     };

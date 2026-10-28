@@ -20,7 +20,9 @@ from .const import CONF_TOKEN, CONF_USERNAME, DB_FILE, DOMAIN, PANEL_URL, STATIC
 from .coordinator import BgRegalCoordinator
 from .core.client import BggClient
 from .core.store import Store
+from .http_rules import RulesFileView, RulesUploadView
 from .http_vote import VoteApiView, VotePageView
+from .llm_api import async_setup_llm_api
 from .runtime import BgRegal
 from .services import async_setup_services
 from .websocket_api import async_setup_websocket
@@ -34,7 +36,7 @@ type BgRegalConfigEntry = ConfigEntry[BgRegalCoordinator]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Einmalig: Dateien fürs Panel, Dashboard-Kachel, Dienste, WebSocket, Abstimmseite."""
+    """Einmalig: Dateien fürs Panel, Dashboard-Kachel, Dienste, WebSocket, Abstimmseite, Anleitungen, LLM-API."""
     await hass.http.async_register_static_paths(
         [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend"), False)]
     )
@@ -43,6 +45,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async_setup_websocket(hass)
     hass.http.register_view(VotePageView())
     hass.http.register_view(VoteApiView())
+    hass.http.register_view(RulesUploadView())
+    hass.http.register_view(RulesFileView())
+    async_setup_llm_api(hass)
     return True
 
 

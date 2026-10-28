@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.4.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.5.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -362,6 +362,7 @@ class BgRegalPanel extends HTMLElement {
     const bases = g.base_ids.map((id) => this._games.get(id)).filter(Boolean);
     const shelves = this._data.shelves.map((s) => s.name);
     const profiles = Object.keys(this._hass.states).filter((id) => id.startsWith("scene.") || id.startsWith("script.")).sort();
+    const rulebooks = this._rulebooks(g.bgg_id);
     const facts = [];
     if (g.min_players && g.max_players) facts.push(g.min_players === g.max_players ? `${g.min_players} ${t.players}` : `${g.min_players}–${g.max_players} ${t.players}`);
     if (g.playing_time) facts.push(`${g.playing_time} ${t.min}`);
@@ -414,6 +415,12 @@ class BgRegalPanel extends HTMLElement {
       ${this._data.options.media_player ? "" : `<p class="muted small">${t.noPlayerHint}</p>`}
       <div class="row"><button class="primary" data-a="save" data-v="${g.bgg_id}">${t.save}</button></div>
 
+      <h3>${t.rulebooks}</h3>
+      ${rulebooks.length ? `<ul class="plain">${rulebooks.map((n) => `<li><a href="#" data-a="rbopen" data-v="${g.bgg_id}|${esc(n)}">${esc(n.slice(0, -4))}</a>
+        <button class="link" data-a="rbdel" data-v="${g.bgg_id}|${esc(n)}">${t.delete}</button></li>`).join("")}</ul>` : `<div class="muted small">${t.noRulebooks}</div>`}
+      <div class="row"><label class="button ${ui.rbUploading ? "disabled" : ""}">${ui.rbUploading ? t.uploading : t.uploadPdf}<input type="file" accept="application/pdf,.pdf" multiple hidden data-upload="${g.bgg_id}" ${ui.rbUploading ? "disabled" : ""}></label></div>
+      <p class="muted small">${t.rulebooksHint}</p>
+
       <h3>${t.loan}</h3>${loan}
       ${expansions.length ? `<h3>${t.expansions}</h3><ul class="plain">${expansions.map((x) => `<li><a href="#" data-a="open" data-v="${x.bgg_id}">${esc(x.name)}</a> <span class="muted small">${x.in_base ? t.inBaseShort : esc(location(x, t))}</span></li>`).join("")}</ul>` : ""}
       <h3>${t.recentPlays}</h3>${plays}
@@ -461,6 +468,7 @@ class BgRegalPanel extends HTMLElement {
           : `<button class="link" data-a="orderedit">${order.length ? t.changeOrder : t.setOrder}</button>`}
         <div class="row center">
           ${g.manual_url ? `<a class="button" href="${esc(g.manual_url)}" target="_blank" rel="noreferrer">${t.manual}</a>` : ""}
+          ${this._rulebooks(s.bgg_id).map((n) => `<button data-a="rbopen" data-v="${s.bgg_id}|${esc(n)}">${esc(n.slice(0, -4))}</button>`).join("")}
           <button class="primary" data-a="end">${t.endSession}</button>
           <button class="danger" data-a="cancel">${t.discard}</button>
         </div>
@@ -647,6 +655,10 @@ class BgRegalPanel extends HTMLElement {
 
   // ---- Eingaben ----------------------------------------------------------------
   _onInput(e) {
+    if (e.target.dataset?.upload) {
+      if (e.type === "change") this._uploadRules(Number(e.target.dataset.upload), [...e.target.files]);
+      return;
+    }
     const k = e.target.dataset?.k;
     if (!k) return;
     const v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
@@ -741,6 +753,12 @@ class BgRegalPanel extends HTMLElement {
         await this._inventoryAction(a.slice(3)); return;
       case "scanassign": await this._assignScanned(); return;
       case "open": return this._openGame(Number(v));
+      case "rbopen": { const [id, name] = v.split("|"); return this._openRules(Number(id), name); }
+      case "rbdel": {
+        const [id, name] = v.split("|");
+        if (confirm(t.confirmDelete)) await this._rulesRequest(Number(id), name, "DELETE");
+        return;
+      }
       case "close": ui.game = null; break;
       case "closeqr": ui.qr = null; break;
       case "copy": try { await navigator.clipboard.writeText(v); this._showToast(t.copied); } catch (_) { this._showToast(v); } return;
@@ -1037,6 +1055,47 @@ class BgRegalPanel extends HTMLElement {
     }
   }
 
+  // ---- Anleitungen (PDF) ----------------------------------------------------
+  _rulebooks(bggId) {
+    return (this._data.rulebooks || {})[bggId] || [];
+  }
+
+  async _rulesRequest(bggId, name, method, body) {
+    const url = `/api/bgregal/rules/${bggId}${name ? `/${encodeURIComponent(name)}` : ""}`;
+    try {
+      const res = await this._hass.fetchWithAuth(url, { method, body });
+      if (res.ok) return res;
+      const err = await res.json().catch(() => ({}));
+      this._showToast(err.message || `${res.status} ${res.statusText}`);
+    } catch (err) {
+      this._showToast(err.message || String(err));
+    }
+    return null;
+  }
+
+  async _uploadRules(bggId, files) {
+    if (!files.length) return;
+    const body = new FormData();
+    for (const f of files) body.append("file", f, f.name);
+    this._ui.rbUploading = true;
+    this._render();
+    const res = await this._rulesRequest(bggId, null, "POST", body);
+    this._ui.rbUploading = false;
+    if (res) this._showToast(this._t.uploaded);
+    else this._render();
+  }
+
+  async _openRules(bggId, name) {
+    // Fenster sofort öffnen (sonst blockiert der Browser das Popup), PDF mit Anmeldung nachladen
+    const win = window.open("", "_blank");
+    const res = await this._rulesRequest(bggId, name, "GET");
+    if (!res) { win?.close(); return; }
+    const url = URL.createObjectURL(await res.blob());
+    if (win) win.location.href = url;
+    else window.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
+  }
+
   async _openGame(bggId) {
     const g = this._games.get(bggId);
     if (!g) return;
@@ -1100,6 +1159,7 @@ const CSS = `
            border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color);
            text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
   button:disabled { opacity: .45; cursor: default; }
+  .button.disabled { opacity: .5; pointer-events: none; }
   button.primary, .button.primary { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
   button.danger { color: var(--error-color); }
   button.icon { border: 0; background: none; font-size: 20px; padding: 6px; }

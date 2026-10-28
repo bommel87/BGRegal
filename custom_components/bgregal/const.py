@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "bgregal"
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 CONF_USERNAME = "username"
 CONF_TOKEN = "token"
@@ -24,6 +24,7 @@ DEFAULTS = {
 }
 
 DB_FILE = "bgregal.db"
+RULES_DIR = "bgregal_anleitungen"  # unter /config: <bgg_id>/<Name>.pdf
 STATIC_URL = "/bgregal_static"
 PANEL_URL = "bgregal"
 SIGNAL_UPDATE = "bgregal_update"

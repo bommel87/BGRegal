@@ -4,7 +4,7 @@
 
 BGRegal bringt deine BoardGameGeek-Sammlung nach Home Assistant und steuert den Spieleabend: virtuelles Regal,
 NFC-Tag je Spiel, Licht- und Soundprofil, Spielhilfe während der Partie, Übergabe an BG Stats, Spielvorschlag,
-Spieleabend-Planung mit Abstimmung, Statistik, Pile of Shame, Wunschliste und Verleih.
+Spieleabend-Planung mit Abstimmung, Statistik, Pile of Shame, Wunschliste, Verleih und Regelfragen per HA Assist.
 
 **BGG ist die Quelle, BG Stats der Ort für Partien.** BGRegal liest nur von BGG und schreibt nie dorthin. Eine Partie
 übergibst du am Ende per QR-Code an BG Stats; BG Stats überträgt sie zu BGG, und beim nächsten Sync erscheint sie in
@@ -38,7 +38,7 @@ und Spieleabende.
 | Bereich | Inhalt |
 | --- | --- |
 | **Regal** | Regale nach Raum gruppiert, Fächer mit allen Schachteln. Suche und Filter heben Treffer hervor, statt Spiele auszublenden. |
-| **Spiel-Fenster** | Infos, letzte Partien, Erweiterungen; Standort, NFC-Tag, EAN, Licht, Sound, Anleitung; verleihen; Sitzung starten |
+| **Spiel-Fenster** | Infos, letzte Partien, Erweiterungen; Standort, NFC-Tag, EAN, Licht, Sound, Anleitung; Anleitungen als PDF; verleihen; Sitzung starten |
 | **Sitzung** | Laufzeit, Runde, wer am Zug ist; danach Mitspieler, Punkte, Gewinner und QR-Code für BG Stats |
 | **Vorschlag** | Filter nach Spielerzahl, Modus, Typ, Dauer und Anwesenden; Ja/Nein; Standort |
 | **Spieleabende** | Termin, Gäste, Spiele zur Wahl, Abstimm-Link und QR-Code, Rangliste |
@@ -109,6 +109,19 @@ Vorlieben. Die Auswahl kannst du ändern. Jeder Abend bekommt einen geheimen Lin
 Abstimmseite. Gäste brauchen **kein** Home-Assistant-Konto; wer den Link hat, kann nur für diesen Abend abstimmen.
 Im WLAN funktioniert der Link immer, von unterwegs nur, wenn Home Assistant von außen erreichbar ist
 (z. B. über Nabu Casa). Abstimmen geht bis 6 Uhr am Morgen nach dem Abend.
+
+### Regelfragen mit HA Assist
+
+Im Spiel-Fenster lädst du unter **Anleitungen (PDF)** die Anleitung hoch, auch mehrere je Spiel (Regelheft,
+Almanach). Während der Sitzung erscheinen sie als Knöpfe auf der Sitzungskarte.
+
+Für Fragen brauchst du einen Assist-Agenten mit LLM, z. B. die Anthropic-Integration mit eigenem API-Key. Beim Agenten
+unter *Konfigurieren → Steuern von Home Assistant* **Spielregeln (BGRegal)** anhaken. Dann fragst du in Assist
+etwa „Darf ich in Catan den Räuber auf die Wüste setzen?“. Ohne Spielnamen ist das Spiel der laufenden Sitzung
+gemeint. Das LLM antwortet nur aus der Anleitung, mit Seitenangabe, und sagt, wenn dort nichts dazu steht.
+
+BGRegal liest den Text beim ersten Abruf aus und speichert ihn zwischen. Gescannte PDFs ohne Textebene kann es nicht
+lesen; die vorher per OCR umwandeln. Höchstens 100 MB je Datei.
 
 ## Dashboard-Kachel
 
@@ -183,7 +196,7 @@ Gerät „Aktionen ausführen“ erlauben.
 
 ## Daten
 
-Alles liegt in `/config/bgregal.db` (SQLite). BGG-Daten werden bei jedem Sync überschrieben, deine eigenen Daten nie.
+Alles liegt in `/config/bgregal.db` (SQLite), Anleitungen unter `/config/bgregal_anleitungen/<BGG-ID>/`. BGG-Daten werden bei jedem Sync überschrieben, deine eigenen Daten nie.
 Spielinfos und die Liste der Erweiterungen frischt BGRegal wöchentlich auf, alle Partien einmal pro Woche vollständig
 (dabei verschwinden auf BGG gelöschte Partien); dazwischen holt jeder Sync nur neue Partien.
 

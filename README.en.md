@@ -4,7 +4,7 @@
 
 BGRegal brings your BoardGameGeek collection into Home Assistant and runs your game night: a virtual shelf, an NFC
 tag per game, light and sound profiles, a play helper during the game, hand-off to BG Stats, game suggestions, game
-night planning with voting, stats, pile of shame, wishlist and loans.
+night planning with voting, stats, pile of shame, wishlist, loans and rules questions in HA Assist.
 
 **BGG is the source, BG Stats is where plays live.** BGRegal only reads from BGG and never writes to it. At the end of
 a game you hand the play to BG Stats with a QR code; BG Stats syncs it to BGG and it shows up in BGRegal after the
@@ -35,7 +35,7 @@ game nights.
 ## The panel
 
 Shelf (by shelf and compartment, with plays and last play on every box), game dialog (info, recent plays,
-expansions, location, NFC tag, light, sound, rules, lending, start), session (timer, round, whose turn; afterwards
+expansions, location, NFC tag, light, sound, rules link and rulebook PDFs, lending, start), session (timer, round, whose turn; afterwards
 players, scores, winner and a QR code for BG Stats), suggestions, game nights (guests, games, voting link and QR
 code, ranking), players (with BGG user and dislikes), stats, pile of shame, wishlist with new expansions, and loans.
 
@@ -45,6 +45,12 @@ dialog. Afterwards a scan starts the session (light profile and playlist), a sec
 **Voting:** every game night gets a secret link with a QR code to a small voting page. Guests need **no** Home
 Assistant account; the link only allows voting for that evening. It always works on your Wi-Fi, from outside only if
 Home Assistant is reachable externally. Voting closes at 6 am the morning after.
+
+**Rules questions:** upload rulebooks in the game dialog under **Rulebooks (PDF)**, several per game if needed. Give
+your Assist agent an LLM (e.g. the Anthropic integration with your own API key) and tick **Spielregeln (BGRegal)**
+under *Configure → Control Home Assistant*. Then ask Assist, e.g. "Can the robber go on the desert in Catan?". Without
+a game name it means the game of the running session. The LLM only answers from the rulebook, cites the page and
+says when the rulebook doesn't cover it. Scanned PDFs without a text layer can't be read; max. 100 MB per file.
 
 ## Dashboard card
 
@@ -74,7 +80,7 @@ location → session with round, whose turn, "next", "round +" and "end". Only a
 
 ## Data
 
-Everything lives in `/config/bgregal.db` (SQLite). BGG data is overwritten on every sync, your own data never.
+Everything lives in `/config/bgregal.db` (SQLite), rulebooks in `/config/bgregal_anleitungen/<BGG id>/`. BGG data is overwritten on every sync, your own data never.
 
 ## License
 

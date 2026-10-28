@@ -359,6 +359,56 @@ async def test_sort_order(hass: HomeAssistant, regal) -> None:
         await svc("set_sort_order", {"kind": "rooms", "order": ["kein_bereich"]})
 
 
+async def test_rulebooks_upload_and_assist(hass: HomeAssistant, regal, hass_client) -> None:
+    from aiohttp import FormData
+    from homeassistant.helpers import llm
+
+    from tests.pdfs import make_pdf
+
+    client = await hass_client()
+    form = FormData()
+    form.add_field("file", make_pdf("Der Raeuber darf auf die Wueste."), filename="Catan.pdf",
+                   content_type="application/pdf")
+    resp = await client.post("/api/bgregal/rules/13", data=form)
+    assert resp.status == 200 and (await resp.json())["saved"] == ["Catan.pdf"]
+    assert regal.snapshot["rulebooks"] == {13: ["Catan.pdf"]}
+
+    bad = FormData()
+    bad.add_field("file", b"kein pdf", filename="x.pdf")
+    assert (await client.post("/api/bgregal/rules/13", data=bad)).status == 400
+    assert (await client.post("/api/bgregal/rules/999", data=form)).status == 404
+
+    pdf = await client.get("/api/bgregal/rules/13/Catan.pdf")
+    assert pdf.status == 200 and (await pdf.read()).startswith(b"%PDF-")
+    assert (await client.get("/api/bgregal/rules/13/bgregal.db")).status == 404
+
+    context = llm.LLMContext(platform="test", context=None, language="de", assistant="conversation",
+                             device_id=None)
+    api = await llm.async_get_api(hass, "bgregal", context)
+    assert {t.name for t in api.tools} == {"get_game_rules", "list_rulebooks"}
+
+    async def call(name, args):
+        # Werkzeug direkt aufrufen: async_call_tool braucht die conversation-Integration (hassil)
+        tool = next(t for t in api.tools if t.name == name)
+        result = await tool.async_call(hass, llm.ToolInput(tool_name=name, tool_args=args), context)
+        return getattr(result, "data", result)
+
+    assert (await call("list_rulebooks", {}))["games"] == ["Catan"]
+    found = await call("get_game_rules", {"game": "catan"})
+    assert found["game"] == "Catan" and "Raeuber" in found["rulebooks"][0]["text"]
+    assert "keine Anleitung" in (await call("get_game_rules", {"game": "Carcassonne"}))["error"]
+    assert "keine Sitzung" in (await call("get_game_rules", {}))["error"]
+
+    # Ohne Spielnamen gilt die laufende Sitzung
+    await hass.services.async_call(DOMAIN, "start_session", {"bgg_id": 13}, blocking=True)
+    api = await llm.async_get_api(hass, "bgregal", context)
+    assert "Laufende Sitzung: Catan" in api.api_prompt
+    assert (await call("get_game_rules", {}))["game"] == "Catan"
+
+    assert (await client.delete("/api/bgregal/rules/13/Catan.pdf")).status == 200
+    assert regal.snapshot["rulebooks"] == {}
+
+
 async def test_unload(hass: HomeAssistant, regal) -> None:
     entry = regal.entry
     assert await hass.config_entries.async_unload(entry.entry_id)

@@ -40,6 +40,7 @@ from .const import (
     EVENT_SESSION_ENDED,
     EVENT_SESSION_STARTED,
     LOAN_REPEAT_DAYS,
+    RULES_DIR,
     SIGNAL_UPDATE,
     TAG_MAX_AGE_MIN,
 )
@@ -48,6 +49,7 @@ from .core import stats, suggest
 from .core.bgstats import auto_winners, play_url, qr_svg
 from .core.client import BggClient
 from .core.errors import BggError
+from .core.rules import RuleBooks
 from .core.store import Store
 from .core.suggest import DISLIKE_OPTIONS
 from .core.sync import SyncResult
@@ -64,6 +66,7 @@ class BgRegal:
         self.entry = entry
         self.client = client
         self.store = store
+        self.rules = RuleBooks(hass.config.path(RULES_DIR))
         self.snapshot: dict[str, Any] = {}
         self.suggestion: dict[str, Any] = {"phase": "idle"}
         self._queue: list[dict[str, Any]] = []
@@ -121,6 +124,7 @@ class BgRegal:
             "evenings": self.store.evenings(),
             "session": session,
             "shelves": self.store.shelves(),
+            "rulebooks": self.rules.index(),
             "room_order": json.loads(self.store.get_meta("room_order") or "[]"),
             "last_sync": self.store.get_meta("last_sync"),
         }

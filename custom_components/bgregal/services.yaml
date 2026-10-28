@@ -77,6 +77,36 @@ set_shelf:
           min: 0
           max: 50
           mode: box
+    compartment_1_bottom:
+      selector:
+        boolean:
+    game_sort:
+      selector:
+        select:
+          translation_key: game_sort
+          options:
+            - name
+            - plays
+            - last_play
+            - manual
+
+set_sort_order:
+  fields:
+    kind:
+      required: true
+      selector:
+        select:
+          translation_key: sort_kind
+          options:
+            - rooms
+            - shelves
+            - games
+    order:
+      required: true
+      example: '["Regal 1", "Regal 2"]'
+      selector:
+        text:
+          multiple: true
 
 remove_shelf:
   fields:

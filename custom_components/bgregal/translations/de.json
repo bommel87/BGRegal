@@ -117,6 +117,21 @@
         "children": "Kinder"
       }
     },
+    "game_sort": {
+      "options": {
+        "name": "Name",
+        "plays": "Partien",
+        "last_play": "Letzte Partie",
+        "manual": "Eigene Reihenfolge"
+      }
+    },
+    "sort_kind": {
+      "options": {
+        "rooms": "Räume",
+        "shelves": "Regale",
+        "games": "Spiele"
+      }
+    },
     "dislike": {
       "options": {
         "cooperative": "Kooperativ",
@@ -211,6 +226,28 @@
         "compartments": {
           "name": "Fächer",
           "description": "Anzahl der angezeigten Fächer (0 = wie belegt)."
+        },
+        "compartment_1_bottom": {
+          "name": "Fach 1 unten",
+          "description": "Fächer von unten nach oben zählen."
+        },
+        "game_sort": {
+          "name": "Spiele sortieren nach",
+          "description": "Reihenfolge der Spiele in jedem Fach."
+        }
+      }
+    },
+    "set_sort_order": {
+      "name": "Reihenfolge festlegen",
+      "description": "Reihenfolge von Räumen, Regalen oder Spielen in einem Fach im Panel.",
+      "fields": {
+        "kind": {
+          "name": "Was",
+          "description": "Räume, Regale oder Spiele."
+        },
+        "order": {
+          "name": "Reihenfolge",
+          "description": "Bereichs-IDs, Regalnamen oder BGG-IDs in der gewünschten Reihenfolge."
         }
       }
     },

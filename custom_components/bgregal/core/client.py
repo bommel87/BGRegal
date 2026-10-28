@@ -22,7 +22,7 @@ from .parser import (
 _LOGGER = logging.getLogger(__name__)
 
 API_BASE = "https://boardgamegeek.com/xmlapi2"
-USER_AGENT = "HomeAssistant-BGRegal/0.3.0"
+USER_AGENT = "HomeAssistant-BGRegal/0.4.0"
 MAX_ATTEMPTS = 8
 RETRY_DELAY = 5  # Sekunden; BGG antwortet bei Sammlungen zuerst oft mit 202
 THING_BATCH_SIZE = 20  # BGG erlaubt höchstens 20 IDs pro /thing

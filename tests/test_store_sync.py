@@ -161,7 +161,7 @@ def test_migrates_schema_1(tmp_path):
     old.close()
     s = Store(str(path))
     try:
-        assert s.get_meta("schema") == "3"
+        assert s.get_meta("schema") == "4"
         assert s.players("susi") == [
             {"name": "Ben", "plays": 0, "from_bgg": False, "bgg_username": "", "dislikes": [], "hidden": False}
         ]
@@ -192,7 +192,8 @@ def test_shelves_and_ean(store):
     store.set_game_meta(325, {"shelf": "Billy", "in_base": 1})  # liegt im Basisspiel, zählt nicht
     store.set_shelf("Keller", area_id="keller")
     shelves = {s["name"]: s for s in store.shelves()}
-    assert shelves["Billy"] == {"name": "Billy", "games": 1, "max_compartment": 3, "area_id": "", "compartments": 3}
+    assert shelves["Billy"] == {"name": "Billy", "games": 1, "max_compartment": 3, "area_id": "", "compartments": 3,
+                                "position": None, "reversed": False, "game_sort": "name"}
     assert shelves["Keller"]["games"] == 0 and shelves["Keller"]["area_id"] == "keller"
     assert store.game_by_ean("4002051693602") == 13 and store.game_by_ean("1") is None
 
@@ -202,3 +203,18 @@ def test_shelves_and_ean(store):
     assert billy["area_id"] == "wohnzimmer" and billy["compartments"] == 6
     assert not store.remove_shelf("Billy Wohnzimmer")  # noch Spiele darin
     assert store.remove_shelf("Keller")
+
+
+def test_sort_orders(store):
+    asyncio.run(run_sync(FakeClient(), store, direct, NOW))
+    store.set_shelf("A-Regal")
+    store.set_shelf("Z-Regal", reversed_=True, game_sort="manual")
+    assert [s["name"] for s in store.shelves()] == ["A-Regal", "Z-Regal"]  # ohne Position alphabetisch
+    store.set_shelf_order(["Z-Regal", "A-Regal"])
+    shelves = store.shelves()
+    assert [s["name"] for s in shelves] == ["Z-Regal", "A-Regal"]
+    assert shelves[0]["reversed"] and shelves[0]["game_sort"] == "manual"
+    store.set_shelf("Z-Regal", area_id="keller")  # andere Einstellung ändert Position/Optionen nicht
+    assert store.shelves()[0]["position"] == 0 and store.shelves()[0]["reversed"]
+    store.set_game_order([325, 13])
+    assert store.game(325)["position"] == 0 and store.game(13)["position"] == 1

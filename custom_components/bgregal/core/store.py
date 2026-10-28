@@ -14,7 +14,7 @@ from typing import Any
 
 from .parser import EXPANSION, CollectionItem, Play, ThingInfo
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
@@ -91,7 +91,10 @@ CREATE TABLE IF NOT EXISTS shelves (
     name TEXT PRIMARY KEY COLLATE NOCASE,
     area_id TEXT NOT NULL DEFAULT '',
     layout TEXT NOT NULL DEFAULT 'upright',  -- aus 0.2.0, ungenutzt
-    compartments INTEGER
+    compartments INTEGER,
+    position INTEGER,
+    reversed INTEGER NOT NULL DEFAULT 0,
+    game_sort TEXT NOT NULL DEFAULT 'name'
 );
 CREATE TABLE IF NOT EXISTS loans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -150,9 +153,14 @@ COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("games", "color", "TEXT"),
     ("games", "color_src", "TEXT"),
     ("game_meta", "ean", "TEXT NOT NULL DEFAULT ''"),
+    ("game_meta", "position", "INTEGER"),  # Schema 4: eigene Reihenfolge im Fach
+    ("shelves", "position", "INTEGER"),
+    ("shelves", "reversed", "INTEGER NOT NULL DEFAULT 0"),
+    ("shelves", "game_sort", "TEXT NOT NULL DEFAULT 'name'"),
 )
 
-META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean")
+META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean", "position")
+GAME_SORTS = ("name", "plays", "last_play", "manual")
 
 
 class Store:
@@ -345,7 +353,7 @@ class Store:
     def games(self) -> list[dict[str, Any]]:
         rows = self._rows(
             """SELECT g.*, m.shelf, m.compartment, m.in_base, m.nfc_tag, m.light_profile,
-                      m.playlist, m.manual_url, m.ean,
+                      m.playlist, m.manual_url, m.ean, m.position,
                       COALESCE(s.plays, 0) AS plays, s.last_play
                FROM games g
                LEFT JOIN game_meta m ON m.bgg_id = g.bgg_id
@@ -421,7 +429,11 @@ class Store:
             s = settings.get(key, {})
             entry["area_id"] = s.get("area_id") or ""
             entry["compartments"] = max(s.get("compartments") or 0, entry["max_compartment"]) or 1
-        return sorted(result.values(), key=lambda e: e["name"].lower())
+            entry["position"] = s.get("position")
+            entry["reversed"] = bool(s.get("reversed"))
+            entry["game_sort"] = s.get("game_sort") or "name"
+        # Eigene Reihenfolge zuerst, Regale ohne Position danach alphabetisch
+        return sorted(result.values(), key=lambda e: (e["position"] is None, e["position"] or 0, e["name"].lower()))
 
     def set_shelf(
         self,
@@ -429,15 +441,22 @@ class Store:
         new_name: str | None = None,
         area_id: str | None = None,
         compartments: int | None = None,
+        reversed_: bool | None = None,
+        game_sort: str | None = None,
     ) -> None:
         """Einstellungen eines Regals; `new_name` benennt es um (auch bei allen Spielen darin)."""
         with self._lock, self._db:
             row = self._db.execute("SELECT * FROM shelves WHERE name = ?", (name,)).fetchone()
-            current = dict(row) if row else {"area_id": "", "compartments": None}
+            current = dict(row) if row else {"area_id": "", "compartments": None, "position": None,
+                                             "reversed": 0, "game_sort": "name"}
             if area_id is not None:
                 current["area_id"] = area_id
             if compartments is not None:
                 current["compartments"] = compartments or None
+            if reversed_ is not None:
+                current["reversed"] = int(reversed_)
+            if game_sort is not None:
+                current["game_sort"] = game_sort
             target = (new_name or name).strip()
             if new_name:
                 self._db.execute(
@@ -445,9 +464,25 @@ class Store:
                 )
             self._db.execute("DELETE FROM shelves WHERE name = ?", (name,))
             self._db.execute(
-                "INSERT OR REPLACE INTO shelves (name, area_id, compartments) VALUES (?, ?, ?)",
-                (target, current["area_id"], current["compartments"]),
+                """INSERT OR REPLACE INTO shelves (name, area_id, compartments, position, reversed, game_sort)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (target, current["area_id"], current["compartments"], current.get("position"),
+                 current.get("reversed") or 0, current.get("game_sort") or "name"),
             )
+
+    def set_shelf_order(self, names: list[str]) -> None:
+        """Reihenfolge der Regale (Position = Index in der Liste)."""
+        with self._lock, self._db:
+            for pos, name in enumerate(names):
+                self._db.execute("INSERT OR IGNORE INTO shelves (name) VALUES (?)", (name,))
+                self._db.execute("UPDATE shelves SET position = ? WHERE name = ?", (pos, name))
+
+    def set_game_order(self, bgg_ids: list[int]) -> None:
+        """Eigene Reihenfolge der Spiele in einem Fach (Position = Index in der Liste)."""
+        with self._lock, self._db:
+            for pos, bgg_id in enumerate(bgg_ids):
+                self._db.execute("INSERT OR IGNORE INTO game_meta (bgg_id) VALUES (?)", (bgg_id,))
+                self._db.execute("UPDATE game_meta SET position = ? WHERE bgg_id = ?", (pos, bgg_id))
 
     def remove_shelf(self, name: str) -> bool:
         """Entfernt die Einstellungen eines leeren Regals."""

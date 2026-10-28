@@ -57,8 +57,13 @@ Die Regale stehen nach Raum gruppiert untereinander. Unter **Regal einstellen** 
 
 - **Raum:** ein Bereich aus Home Assistant. Jedes Regal ist ein eigenes Gerät in diesem Raum, mit einem Sensor für die
   Zahl der Spiele. Änderst du den Raum am Gerät in Home Assistant, übernimmt BGRegal ihn.
-- **Fächer:** wie viele Fächer das Regal hat, auch leere.
+- **Fächer:** wie viele Fächer das Regal hat, auch leere, und ob Fach 1 oben oder unten ist.
+- **Spiele sortieren nach:** Name, Partien, letzte Partie oder eigene Reihenfolge.
 - **Name:** Umbenennen ändert den Standort aller Spiele darin.
+
+**Sortieren** in der Regalansicht schaltet Pfeile ein: ▲▼ verschieben Räume und Regale, ◀▶ verschieben Spiele in
+Regalen mit eigener Reihenfolge. Die Reihenfolge speichert die Integration, sie gilt also auf allen Geräten. Bei der
+Inventur wird die Scan-Reihenfolge gleich als eigene Reihenfolge im Fach übernommen.
 
 Suchst du ein Spiel oder wählst einen Filter, bleiben alle Regale sichtbar: Treffer bekommen einen farbigen Rahmen,
 alles andere wird blass, und die Ansicht springt zum ersten Treffer.
@@ -142,7 +147,8 @@ Alle Dienste liegen unter `bgregal.*`; ein Spiel gibst du mit `bgg_id` oder `nam
 | `sync_now` | sofort synchronisieren |
 | `set_game` | `shelf`, `compartment`, `in_base`, `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`; leer = löschen |
 | `scan_code` | gescannter Barcode oder Tag: Sitzung starten/beenden, sonst `unknown` |
-| `set_shelf` / `remove_shelf` | Regal: `area_id`, `compartments`, `new_name` |
+| `set_shelf` / `remove_shelf` | Regal: `area_id`, `compartments`, `compartment_1_bottom`, `game_sort`, `new_name` |
+| `set_sort_order` | Reihenfolge: `kind` (`rooms`/`shelves`/`games`) und `order` |
 | `start_inventory` / `inventory_place` / `inventory_undo` / `inventory_next` / `stop_inventory` | Inventur; `clear_missing` setzt nicht gescannte Spiele des Fachs auf „Ohne Standort“ |
 | `assign_scanned_tag` | zuletzt gescannten Tag zuordnen |
 | `lend_game` / `return_game` | verleihen (`borrower`) / zurück |

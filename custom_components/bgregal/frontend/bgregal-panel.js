@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.3.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.4.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -200,6 +200,59 @@ class BgRegalPanel extends HTMLElement {
     return (areaId && this._hass.areas?.[areaId]?.name) || "";
   }
 
+  /** Bereichs-IDs der Räume in Anzeige-Reihenfolge ("" = ohne Raum, standardmäßig zuletzt). */
+  _roomOrder() {
+    const present = [...new Set(this._data.shelves.map((s) => s.area_id || ""))];
+    const saved = (this._data.room_order || []).filter((a) => present.includes(a));
+    const rest = present.filter((a) => !saved.includes(a))
+      .sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || naturalCompare(this._areaName(a), this._areaName(b)));
+    return [...saved, ...rest];
+  }
+
+  /** Spiele eines Fachs in der eingestellten Reihenfolge des Regals. */
+  _sortGames(list, shelf) {
+    const byName = (a, b) => naturalCompare(a.name, b.name);
+    const sorters = {
+      name: byName,
+      plays: (a, b) => (b.plays || 0) - (a.plays || 0) || byName(a, b),
+      last_play: (a, b) => (b.last_play || "").localeCompare(a.last_play || "") || byName(a, b),
+      manual: (a, b) => (a.position ?? 1e9) - (b.position ?? 1e9) || byName(a, b),
+    };
+    return [...list].sort(sorters[shelf?.game_sort] || byName);
+  }
+
+  _gamesInCompartment(shelfName, compartment) {
+    const shelf = this._data.shelves.find((s) => s.name.toLowerCase() === shelfName.toLowerCase());
+    const list = this._shelfGames().filter((g) => g.shelf.toLowerCase() === shelfName.toLowerCase() && (g.compartment || null) === (compartment || null));
+    return this._sortGames(list, shelf);
+  }
+
+  async _move(kind, id, step) {
+    if (kind === "room") {
+      const order = this._roomOrder();
+      const i = order.indexOf(id), j = i + step;
+      if (i < 0 || j < 0 || j >= order.length) return;
+      [order[i], order[j]] = [order[j], order[i]];
+      await this._call("set_sort_order", { kind: "rooms", order });
+    } else if (kind === "shelf") {
+      const names = this._data.shelves.map((s) => s.name);
+      const me = this._data.shelves.find((s) => s.name === id);
+      const sameRoom = this._data.shelves.filter((s) => (s.area_id || "") === (me.area_id || "")).map((s) => s.name);
+      const k = sameRoom.indexOf(id), other = sameRoom[k + step];
+      if (!other) return;
+      const a = names.indexOf(id), b = names.indexOf(other);
+      [names[a], names[b]] = [names[b], names[a]];
+      await this._call("set_sort_order", { kind: "shelves", order: names });
+    } else {
+      const g = this._games.get(Number(id));
+      const ids = this._gamesInCompartment(g.shelf, g.compartment).map((x) => x.bgg_id);
+      const i = ids.indexOf(g.bgg_id), j = i + step;
+      if (j < 0 || j >= ids.length) return;
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+      await this._call("set_sort_order", { kind: "games", order: ids.map(String) });
+    }
+  }
+
   /** IDs der Spiele, die zu Suche und Filter passen; null = nichts hervorheben. */
   _hits() {
     const ui = this._ui;
@@ -223,36 +276,46 @@ class BgRegalPanel extends HTMLElement {
     const toolbar = `<div class="toolbar">
         <input type="search" placeholder="${t.search}" value="${esc(ui.search)}" data-k="search">
         <div class="chips">${filters}</div>
+        <button class="chip ${ui.sorting ? "on" : ""}" data-a="sorttoggle">⇅ ${ui.sorting ? t.sortDone : t.sortMode}</button>
         ${hits ? `<span class="hitcount ${hits.size ? "" : "none"}">${hits.size ? `${hits.size} ${hits.size === 1 ? t.hit : t.hitsWord}` : t.noMatch}</span>` : ""}
       </div>`;
     if (!this._data.games.length) return toolbar + `<div class="empty">${t.noGames}</div>`;
 
     const games = this._shelfGames();
-    const tile = (g) => this._tile(g, "", hits ? (hits.has(g.bgg_id) ? "hit" : "dim") : "");
+    const sorting = ui.sorting;
+    const arrows = (kind, id, a = "▲", b = "▼", labels = [t.moveUp, t.moveDown]) => sorting
+      ? `<span class="moves"><button class="icon small" data-a="move" data-v="${kind}|${esc(id)}|-1" title="${labels[0]}">${a}</button><button class="icon small" data-a="move" data-v="${kind}|${esc(id)}|1" title="${labels[1]}">${b}</button></span>` : "";
+    const tileFor = (shelf) => (g) => {
+      const html = this._tile(g, "", hits ? (hits.has(g.bgg_id) ? "hit" : "dim") : "");
+      return sorting && shelf?.game_sort === "manual"
+        ? `<div class="tilewrap">${html}${arrows("game", g.bgg_id, "◀", "▶", [t.moveLeft, t.moveRight])}</div>` : html;
+    };
     const rooms = new Map();
     for (const shelf of this._data.shelves) {
-      const room = this._areaName(shelf.area_id);
-      if (!rooms.has(room)) rooms.set(room, []);
-      rooms.get(room).push(shelf);
+      const key = shelf.area_id || "";
+      if (!rooms.has(key)) rooms.set(key, []);
+      rooms.get(key).push(shelf);
     }
-    // Räume alphabetisch, Regale ohne Raum zuletzt
-    const roomNames = [...rooms.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || naturalCompare(a, b));
     const shelfHtml = (shelf) => {
       const inShelf = games.filter((g) => g.shelf.toLowerCase() === shelf.name.toLowerCase());
+      const tile = tileFor(shelf);
       const rows = [];
-      for (let n = 1; n <= shelf.compartments; n++) {
-        const list = inShelf.filter((g) => g.compartment === n);
+      const numbers = Array.from({ length: shelf.compartments }, (_, i) => i + 1);
+      if (shelf.reversed) numbers.reverse(); // Fach 1 unten
+      for (const n of numbers) {
+        const list = this._sortGames(inShelf.filter((g) => g.compartment === n), shelf);
         rows.push(`<div class="fach"><div class="fnum">${t.compartment} ${n}</div><div class="boxes">${list.map(tile).join("") || `<span class="muted small">${t.emptyCompartment}</span>`}</div></div>`);
       }
-      const loose = inShelf.filter((g) => !g.compartment);
+      const loose = this._sortGames(inShelf.filter((g) => !g.compartment), shelf);
       if (loose.length) rows.push(`<div class="fach"><div class="fnum">${t.noCompartment}</div><div class="boxes">${loose.map(tile).join("")}</div></div>`);
-      return `<section class="billy"><div class="shead"><h2>${esc(shelf.name)}</h2>
-        <button class="link" data-a="editshelf" data-v="${esc(shelf.name)}">${t.shelfSettings}</button></div>${rows.join("")}</section>`;
+      const hint = sorting && shelf.game_sort !== "manual" ? `<span class="muted small">${t.manualHint}</span>` : "";
+      return `<section class="billy"><div class="shead"><h2>${esc(shelf.name)}</h2>${arrows("shelf", shelf.name)}
+        <button class="link" data-a="editshelf" data-v="${esc(shelf.name)}">${t.shelfSettings}</button>${hint}</div>${rows.join("")}</section>`;
     };
-    const unplaced = games.filter((g) => !g.shelf);
+    const unplaced = this._sortGames(games.filter((g) => !g.shelf));
     return toolbar
-      + roomNames.map((room) => `<section class="room"><h2 class="roomname">${esc(room || t.noRoom)}</h2>${rooms.get(room).map(shelfHtml).join("")}</section>`).join("")
-      + (unplaced.length ? `<section class="billy loose"><h2>${t.noLocation}</h2><div class="boxes">${unplaced.map(tile).join("")}</div></section>` : "")
+      + this._roomOrder().map((key) => `<section class="room"><h2 class="roomname">${esc(this._areaName(key) || t.noRoom)}${arrows("room", key)}</h2>${rooms.get(key).map(shelfHtml).join("")}</section>`).join("")
+      + (unplaced.length ? `<section class="billy loose"><h2>${t.noLocation}</h2><div class="boxes">${unplaced.map(tileFor(null)).join("")}</div></section>` : "")
       + `<div class="row"><button data-a="newshelf">+ ${t.newShelf}</button>
           <button data-a="inventory">${BARCODE_ICON} ${this._data.inventory ? t.invContinue : t.inventory}</button></div>`;
   }
@@ -277,6 +340,11 @@ class BgRegalPanel extends HTMLElement {
         <label>${t.room}<select data-k="sh.area_id"><option value="">${t.noRoom}</option>${areas.map((a) =>
           `<option value="${esc(a.area_id)}" ${a.area_id === e.area_id ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></label>
         <label>${t.compartments}<input type="number" min="1" max="50" value="${esc(e.compartments)}" data-k="sh.compartments"></label>
+        <label>${t.compartmentOrder}<select data-k="sh.reversed">
+          <option value="false" ${e.reversed ? "" : "selected"}>${t.compartment1Top}</option>
+          <option value="true" ${e.reversed ? "selected" : ""}>${t.compartment1Bottom}</option></select></label>
+        <label>${t.gameSort}<select data-k="sh.game_sort">${["name", "plays", "last_play", "manual"].map((k) =>
+          `<option value="${k}" ${e.game_sort === k ? "selected" : ""}>${t.gameSorts[k]}</option>`).join("")}</select></label>
       </div>
       <p class="muted small">${t.shelfHint}</p>
       <div class="row"><button class="primary" data-a="saveshelf" ${e.name.trim() ? "" : "disabled"}>${t.save}</button>
@@ -640,16 +708,20 @@ class BgRegalPanel extends HTMLElement {
       case "tab": this._tab = v; ui.game = null; break;
       case "sync": if (await this._call("sync_now")) this._showToast(t.syncStarted); return;
       case "filter": ui.filter = v; this._render(); this._scrollToHit(); return;
-      case "newshelf": ui.shelfEdit = { original: "", name: "", area_id: "", compartments: 6 }; break;
+      case "sorttoggle": ui.sorting = !ui.sorting; break;
+      case "move": { const [kind, id, step] = v.split("|"); await this._move(kind, id, Number(step)); return; }
+      case "newshelf": ui.shelfEdit = { original: "", name: "", area_id: "", compartments: 6, reversed: false, game_sort: "name" }; break;
       case "editshelf": {
         const s = this._data.shelves.find((x) => x.name === v);
-        ui.shelfEdit = { original: s.name, name: s.name, area_id: s.area_id, compartments: s.compartments };
+        ui.shelfEdit = { original: s.name, name: s.name, area_id: s.area_id, compartments: s.compartments,
+                         reversed: s.reversed, game_sort: s.game_sort };
         break;
       }
       case "closeshelfedit": ui.shelfEdit = null; break;
       case "saveshelf": {
         const e = ui.shelfEdit, name = e.name.trim();
-        const data = { name: e.original || name, area_id: e.area_id, compartments: Number(e.compartments) || 0 };
+        const data = { name: e.original || name, area_id: e.area_id, compartments: Number(e.compartments) || 0,
+                       compartment_1_bottom: String(e.reversed) === "true", game_sort: e.game_sort };
         if (e.original && name !== e.original) data.new_name = name;
         if (await this._call("set_shelf", data)) { ui.shelfEdit = null; this._showToast(t.saved); }
         return;
@@ -1070,6 +1142,12 @@ const CSS = `
               background: color-mix(in srgb, var(--accent-color, #ff9800) 14%, var(--card-background-color)); }
   .tile.dim, .tile.dim.lent { opacity: .3; }
   .tile.dim:hover, .tile.dim.lent:hover { opacity: .8; }
+  .moves { display: inline-flex; gap: 2px; margin-left: 6px; vertical-align: middle; }
+  .moves button { border: 1px solid var(--divider-color); border-radius: 6px; padding: 2px 7px; font-size: 12px;
+                  color: var(--primary-color); background: var(--card-background-color); }
+  .tilewrap { display: flex; flex-direction: column; gap: 4px; }
+  .tilewrap .moves { margin: 0; justify-content: center; }
+  h2.roomname .moves { text-transform: none; letter-spacing: 0; }
   .hitcount { font-size: 13px; font-weight: 500; color: var(--accent-color, #ff9800); }
   .hitcount.none { color: var(--error-color); }
   .small-dialog { width: min(480px, 100%); }

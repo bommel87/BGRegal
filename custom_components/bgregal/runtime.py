@@ -6,6 +6,7 @@ Zuordnungen, NFC, Sitzung mit Licht und Sound, Vorschlag, Verleih, Mitspieler, S
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import random
 import secrets
@@ -120,6 +121,7 @@ class BgRegal:
             "evenings": self.store.evenings(),
             "session": session,
             "shelves": self.store.shelves(),
+            "room_order": json.loads(self.store.get_meta("room_order") or "[]"),
             "last_sync": self.store.get_meta("last_sync"),
         }
 
@@ -190,6 +192,8 @@ class BgRegal:
         new_name: str | None = None,
         area_id: str | None = None,
         compartments: int | None = None,
+        reversed_: bool | None = None,
+        game_sort: str | None = None,
     ) -> None:
         shelf = next((s for s in self.snapshot.get("shelves", []) if s["name"].lower() == name.lower()), None)
         name = shelf["name"] if shelf else name.strip()
@@ -199,11 +203,35 @@ class BgRegal:
             raise ServiceValidationError(f"Den Bereich „{area_id}“ gibt es nicht")
         if new_name is not None and not new_name.strip():
             raise ServiceValidationError("Der neue Name darf nicht leer sein")
-        await self._run(self.store.set_shelf, name, new_name, area_id, compartments)
+        await self._run(self.store.set_shelf, name, new_name, area_id, compartments, reversed_, game_sort)
         if area_id is not None:
             device = self.shelf_device(new_name or name)
             if device is not None:
                 dr.async_get(self.hass).async_update_device(device.id, area_id=area_id or None)
+        await self.async_refresh()
+
+    async def async_set_sort_order(self, kind: str, order: list[str]) -> None:
+        """Reihenfolge von Räumen (Bereichs-IDs, "" = ohne Raum), Regalen (Namen) oder Spielen (BGG-IDs)."""
+        if kind == "rooms":
+            registry = ar.async_get(self.hass)
+            unknown = [a for a in order if a and registry.async_get_area(a) is None]
+            if unknown:
+                raise ServiceValidationError(f"Unbekannte Bereiche: {', '.join(unknown)}")
+            await self._run(self.store.set_meta, "room_order", json.dumps(list(dict.fromkeys(order))))
+        elif kind == "shelves":
+            known = {s["name"].lower(): s["name"] for s in self.snapshot.get("shelves", [])}
+            missing = [n for n in order if n.lower() not in known]
+            if missing:
+                raise ServiceValidationError(f"Unbekannte Regale: {', '.join(missing)}")
+            await self._run(self.store.set_shelf_order, [known[n.lower()] for n in order])
+        else:
+            try:
+                ids = [int(i) for i in order]
+            except ValueError as err:
+                raise ServiceValidationError("Spiele als BGG-IDs angeben") from err
+            for bgg_id in ids:
+                self.find_game(bgg_id)
+            await self._run(self.store.set_game_order, ids)
         await self.async_refresh()
 
     async def async_remove_shelf(self, name: str) -> None:
@@ -425,11 +453,13 @@ class BgRegal:
             return {**result, "result": "already"}
         inv["placed"].append({
             "bgg_id": game["bgg_id"], "name": game["name"], "shelf": game["shelf"],
-            "compartment": game["compartment"], "in_base": game["in_base"],
+            "compartment": game["compartment"], "in_base": game["in_base"], "position": game.get("position"),
         })
         await self._run(
             self.store.set_game_meta, game["bgg_id"],
-            {"shelf": inv["shelf"], "compartment": inv["compartment"], "in_base": 0},
+            # Scan-Reihenfolge = Reihenfolge im Fach
+            {"shelf": inv["shelf"], "compartment": inv["compartment"], "in_base": 0,
+             "position": len(inv["placed"]) - 1},
         )
         await self.async_refresh()
         return result
@@ -442,7 +472,8 @@ class BgRegal:
         last = inv["placed"].pop()
         await self._run(
             self.store.set_game_meta, last["bgg_id"],
-            {"shelf": last["shelf"], "compartment": last["compartment"], "in_base": int(bool(last["in_base"]))},
+            {"shelf": last["shelf"], "compartment": last["compartment"], "in_base": int(bool(last["in_base"])),
+             "position": last.get("position")},
         )
         await self.async_refresh()
         return {"bgg_id": last["bgg_id"], "name": last["name"]}

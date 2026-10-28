@@ -48,6 +48,16 @@ SERVICES = {
         "new_name": ("New name", "Renames the shelf for all games in it.", "Neuer Name", "Benennt das Regal bei allen Spielen darin um."),
         "area_id": ("Room", "Home Assistant area of the shelf (empty = none).", "Raum", "Bereich des Regals in Home Assistant (leer = keiner)."),
         "compartments": ("Compartments", "Number of compartments shown (0 = as used).", "Fächer", "Anzahl der angezeigten Fächer (0 = wie belegt)."),
+        "compartment_1_bottom": ("Compartment 1 at the bottom", "Number compartments from the bottom up.",
+                                 "Fach 1 unten", "Fächer von unten nach oben zählen."),
+        "game_sort": ("Sort games by", "Order of the games inside each compartment.",
+                      "Spiele sortieren nach", "Reihenfolge der Spiele in jedem Fach."),
+    }),
+    "set_sort_order": ("Set order", "Order of rooms, shelves or games in a compartment in the panel.",
+                       "Reihenfolge festlegen", "Reihenfolge von Räumen, Regalen oder Spielen in einem Fach im Panel.", {
+        "kind": ("What", "Rooms, shelves or games.", "Was", "Räume, Regale oder Spiele."),
+        "order": ("Order", "Area IDs, shelf names or BGG IDs in the desired order.",
+                  "Reihenfolge", "Bereichs-IDs, Regalnamen oder BGG-IDs in der gewünschten Reihenfolge."),
     }),
     "remove_shelf": ("Remove shelf", "Removes an empty shelf.", "Regal entfernen", "Entfernt ein leeres Regal.", {
         "name": ("Shelf", "Name of the shelf.", "Regal", "Name des Regals.")}),
@@ -157,6 +167,9 @@ SELECTORS = {
                   "party": ("Party", "Party"), "abstract": ("Abstract", "Abstrakt"), "thematic": ("Thematic", "Thematisch"),
                   "wargame": ("Wargame", "Kriegsspiel"), "children": ("Children", "Kinder")},
 }
+SELECTORS["game_sort"] = {"name": ("Name", "Name"), "plays": ("Plays", "Partien"),
+                          "last_play": ("Last play", "Letzte Partie"), "manual": ("Own order", "Eigene Reihenfolge")}
+SELECTORS["sort_kind"] = {"rooms": ("Rooms", "Räume"), "shelves": ("Shelves", "Regale"), "games": ("Games", "Spiele")}
 SELECTORS["dislike"] = {k: v for k, v in {**SELECTORS["mode"], **SELECTORS["game_type"]}.items() if k != "any"}
 
 CONFIG = {

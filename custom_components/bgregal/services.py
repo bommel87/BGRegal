@@ -12,6 +12,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .core.store import GAME_SORTS
 from .core.suggest import DISLIKE_OPTIONS, GAME_TYPES, MODES
 from .runtime import BgRegal
 
@@ -42,6 +43,14 @@ SCHEMAS: dict[str, vol.Schema] = {
             vol.Optional("new_name"): cv.string,
             vol.Optional("area_id"): vol.Any(None, cv.string),
             vol.Optional("compartments"): vol.All(vol.Coerce(int), vol.Range(min=0, max=50)),
+            vol.Optional("compartment_1_bottom"): cv.boolean,
+            vol.Optional("game_sort"): vol.In(GAME_SORTS),
+        }
+    ),
+    "set_sort_order": vol.Schema(
+        {
+            vol.Required("kind"): vol.In(("rooms", "shelves", "games")),
+            vol.Required("order"): vol.All(cv.ensure_list, [vol.Coerce(str)]),
         }
     ),
     "remove_shelf": vol.Schema({vol.Required("name"): cv.string}),
@@ -172,8 +181,10 @@ async def _handle(regal: BgRegal, service: str, d: dict[str, Any]) -> dict[str, 
         case "set_shelf":
             await regal.async_set_shelf(
                 d["name"], d.get("new_name"), d.get("area_id") if "area_id" in d else None,
-                d.get("compartments"),
+                d.get("compartments"), d.get("compartment_1_bottom"), d.get("game_sort"),
             )
+        case "set_sort_order":
+            await regal.async_set_sort_order(d["kind"], d["order"])
         case "remove_shelf":
             await regal.async_remove_shelf(d["name"])
         case "start_inventory":

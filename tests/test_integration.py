@@ -312,6 +312,7 @@ async def test_inventory(hass: HomeAssistant, regal) -> None:
 
     await call("inventory_place", {"name": "Carcassonne"})
     assert regal.find_game(822)["compartment"] == 2
+    assert regal.find_game(822)["position"] == 0  # erstes gescanntes Spiel im Fach steht vorn
     assert (await call("stop_inventory"))["cleared"] == []
     assert regal.inventory is None
 
@@ -332,6 +333,30 @@ async def test_inventory_times_out(hass: HomeAssistant, regal) -> None:
     assert regal.inventory is None
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(DOMAIN, "inventory_undo", {}, blocking=True, return_response=True)
+
+
+async def test_sort_order(hass: HomeAssistant, regal) -> None:
+    from homeassistant.helpers import area_registry as ar
+
+    keller = ar.async_get(hass).async_create("Keller")
+    svc = lambda name, data: hass.services.async_call(DOMAIN, name, data, blocking=True)  # noqa: E731
+    await svc("set_game", {"bgg_id": 13, "shelf": "B", "compartment": 1})
+    await svc("set_game", {"bgg_id": 822, "shelf": "A", "compartment": 1})
+    await svc("set_shelf", {"name": "B", "compartment_1_bottom": True, "game_sort": "manual"})
+    await svc("set_sort_order", {"kind": "shelves", "order": ["b", "A"]})
+    shelves = regal.snapshot["shelves"]
+    assert [s["name"] for s in shelves] == ["B", "A"]
+    assert shelves[0]["reversed"] and shelves[0]["game_sort"] == "manual"
+
+    await svc("set_sort_order", {"kind": "rooms", "order": [keller.id, ""]})
+    assert regal.public_state()["room_order"] == [keller.id, ""]
+    await svc("set_sort_order", {"kind": "games", "order": ["822", "13"]})
+    assert regal.find_game(822)["position"] == 0 and regal.find_game(13)["position"] == 1
+
+    with pytest.raises(ServiceValidationError):
+        await svc("set_sort_order", {"kind": "shelves", "order": ["Gibtsnicht"]})
+    with pytest.raises(ServiceValidationError):
+        await svc("set_sort_order", {"kind": "rooms", "order": ["kein_bereich"]})
 
 
 async def test_unload(hass: HomeAssistant, regal) -> None:

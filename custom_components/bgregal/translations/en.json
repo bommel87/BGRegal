@@ -117,6 +117,21 @@
         "children": "Children"
       }
     },
+    "game_sort": {
+      "options": {
+        "name": "Name",
+        "plays": "Plays",
+        "last_play": "Last play",
+        "manual": "Own order"
+      }
+    },
+    "sort_kind": {
+      "options": {
+        "rooms": "Rooms",
+        "shelves": "Shelves",
+        "games": "Games"
+      }
+    },
     "dislike": {
       "options": {
         "cooperative": "Cooperative",
@@ -211,6 +226,28 @@
         "compartments": {
           "name": "Compartments",
           "description": "Number of compartments shown (0 = as used)."
+        },
+        "compartment_1_bottom": {
+          "name": "Compartment 1 at the bottom",
+          "description": "Number compartments from the bottom up."
+        },
+        "game_sort": {
+          "name": "Sort games by",
+          "description": "Order of the games inside each compartment."
+        }
+      }
+    },
+    "set_sort_order": {
+      "name": "Set order",
+      "description": "Order of rooms, shelves or games in a compartment in the panel.",
+      "fields": {
+        "kind": {
+          "name": "What",
+          "description": "Rooms, shelves or games."
+        },
+        "order": {
+          "name": "Order",
+          "description": "Area IDs, shelf names or BGG IDs in the desired order."
         }
       }
     },

@@ -409,6 +409,54 @@ async def test_rulebooks_upload_and_assist(hass: HomeAssistant, regal, hass_clie
     assert regal.snapshot["rulebooks"] == {}
 
 
+async def test_links_for_assist(hass: HomeAssistant, regal) -> None:
+    from homeassistant.helpers import llm
+
+    from custom_components.bgregal.core.links import LinkError
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "set_game", {"bgg_id": 822, "links": [{"url": "ftp://x.de"}]}, blocking=True
+        )
+    await hass.services.async_call(
+        DOMAIN, "set_game",
+        {"bgg_id": 822, "links": [{"title": "Errata", "url": "https://example.com/errata"},
+                                  {"title": "FAQ", "url": "https://example.com/faq"}]},
+        blocking=True,
+    )
+    assert [l["title"] for l in regal.find_game(822)["links"]] == ["Errata", "FAQ"]
+
+    calls = []
+
+    async def fake_download(session, url):
+        calls.append(url)
+        if url.endswith("faq"):
+            raise LinkError("HTTP 404")
+        return "<p>Bauern dürfen auf Wiesen.</p>".encode(), "text/html", "utf-8"
+
+    context = llm.LLMContext(platform="test", context=None, language="de", assistant="conversation",
+                             device_id=None)
+    api = await llm.async_get_api(hass, "bgregal", context)
+    tool = next(t for t in api.tools if t.name == "get_game_rules")
+
+    async def ask():
+        result = await tool.async_call(
+            hass, llm.ToolInput(tool_name="get_game_rules", tool_args={"game": "Carcassonne"}), context)
+        return getattr(result, "data", result)
+
+    with patch("custom_components.bgregal.core.links.download", fake_download):
+        data = await ask()
+        assert data["rulebooks"] == []
+        assert data["links"][0]["text"] == "Bauern dürfen auf Wiesen."
+        assert data["links"][1]["error"] == "nicht abrufbar: HTTP 404"
+        await ask()  # Errata kommt jetzt aus dem Zwischenspeicher
+    assert calls.count("https://example.com/errata") == 1
+
+    lister = next(t for t in api.tools if t.name == "list_rulebooks")
+    listed = await lister.async_call(hass, llm.ToolInput(tool_name="list_rulebooks", tool_args={}), context)
+    assert getattr(listed, "data", listed)["games"] == ["Carcassonne"]
+
+
 async def test_unload(hass: HomeAssistant, regal) -> None:
     entry = regal.entry
     assert await hass.config_entries.async_unload(entry.entry_id)

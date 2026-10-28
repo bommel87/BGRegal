@@ -14,7 +14,7 @@ from typing import Any
 
 from .parser import EXPANSION, CollectionItem, Play, ThingInfo
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
@@ -85,7 +85,8 @@ CREATE TABLE IF NOT EXISTS game_meta (
     light_profile TEXT NOT NULL DEFAULT '',
     playlist TEXT NOT NULL DEFAULT '',
     manual_url TEXT NOT NULL DEFAULT '',
-    ean TEXT NOT NULL DEFAULT ''
+    ean TEXT NOT NULL DEFAULT '',
+    links TEXT NOT NULL DEFAULT '[]'
 );
 CREATE TABLE IF NOT EXISTS shelves (
     name TEXT PRIMARY KEY COLLATE NOCASE,
@@ -154,12 +155,13 @@ COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("games", "color_src", "TEXT"),
     ("game_meta", "ean", "TEXT NOT NULL DEFAULT ''"),
     ("game_meta", "position", "INTEGER"),  # Schema 4: eigene Reihenfolge im Fach
+    ("game_meta", "links", "TEXT NOT NULL DEFAULT '[]'"),  # Schema 5: Errata, FAQ, Almanach
     ("shelves", "position", "INTEGER"),
     ("shelves", "reversed", "INTEGER NOT NULL DEFAULT 0"),
     ("shelves", "game_sort", "TEXT NOT NULL DEFAULT 'name'"),
 )
 
-META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean", "position")
+META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean", "position", "links")
 GAME_SORTS = ("name", "plays", "last_play", "manual")
 
 
@@ -353,7 +355,7 @@ class Store:
     def games(self) -> list[dict[str, Any]]:
         rows = self._rows(
             """SELECT g.*, m.shelf, m.compartment, m.in_base, m.nfc_tag, m.light_profile,
-                      m.playlist, m.manual_url, m.ean, m.position,
+                      m.playlist, m.manual_url, m.ean, m.position, m.links,
                       COALESCE(s.plays, 0) AS plays, s.last_play
                FROM games g
                LEFT JOIN game_meta m ON m.bgg_id = g.bgg_id
@@ -381,6 +383,7 @@ class Store:
             for key in ("shelf", "nfc_tag", "light_profile", "playlist", "manual_url", "ean"):
                 g[key] = g[key] or ""
             g["in_base"] = bool(g["in_base"])
+            g["links"] = json.loads(g["links"] or "[]")
             g["expansion"] = g["subtype"] == EXPANSION
             g["last_players"] = players_by_play.get(last_ids.get(g["bgg_id"]), [])
             loan = loans.get(g["bgg_id"])

@@ -123,6 +123,11 @@ gemeint. Das LLM antwortet nur aus der Anleitung, mit Seitenangabe, und sagt, we
 BGRegal liest den Text beim ersten Abruf aus und speichert ihn zwischen. Gescannte PDFs ohne Textebene kann es nicht
 lesen; die vorher per OCR umwandeln. Höchstens 100 MB je Datei.
 
+Unter den PDFs trägst du beliebig viele **Links** ein, etwa zu Errata, FAQ oder Almanach (Titel und Adresse,
+dann **Speichern**). Sie erscheinen als Knöpfe im Spiel-Fenster und auf der Sitzungskarte. Assist liest Webseiten
+und PDFs hinter den Links mit; Errata gehen der Anleitung vor. Der Text wird 7 Tage zwischengespeichert. Seiten
+hinter einem Login oder solche, die ihren Inhalt erst per JavaScript laden (z. B. BGG-Foren), liefern oft keinen Text.
+
 ## Dashboard-Kachel
 
 ```yaml
@@ -158,7 +163,7 @@ Alle Dienste liegen unter `bgregal.*`; ein Spiel gibst du mit `bgg_id` oder `nam
 | Dienst | Zweck |
 | --- | --- |
 | `sync_now` | sofort synchronisieren |
-| `set_game` | `shelf`, `compartment`, `in_base`, `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`; leer = löschen |
+| `set_game` | `shelf`, `compartment`, `in_base`, `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`, `links` (Liste aus `title` und `url`); leer = löschen |
 | `scan_code` | gescannter Barcode oder Tag: Sitzung starten/beenden, sonst `unknown` |
 | `set_shelf` / `remove_shelf` | Regal: `area_id`, `compartments`, `compartment_1_bottom`, `game_sort`, `new_name` |
 | `set_sort_order` | Reihenfolge: `kind` (`rooms`/`shelves`/`games`) und `order` |

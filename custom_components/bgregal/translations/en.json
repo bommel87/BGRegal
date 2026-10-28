@@ -191,6 +191,10 @@
           "name": "Manual",
           "description": "Link to the rules."
         },
+        "links": {
+          "name": "Links",
+          "description": "Further links such as errata, FAQ or almanac: list of title and url. Assist reads them for rules questions."
+        },
         "ean": {
           "name": "EAN",
           "description": "Barcode on the box (8, 12, 13 or 14 digits)."

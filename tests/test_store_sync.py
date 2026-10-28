@@ -111,6 +111,31 @@ def test_meta_survives_sync_and_tags(store):
     assert store.game_by_tag("abc") == 13
 
 
+def test_links_stored_as_list(store):
+    asyncio.run(run_sync(FakeClient(), store, direct, NOW))
+    assert store.game(13)["links"] == []
+    store.set_game_meta(13, {"links": '[{"title": "Errata", "url": "https://example.com/e.pdf"}]'})
+    assert store.game(13)["links"] == [{"title": "Errata", "url": "https://example.com/e.pdf"}]
+
+
+def test_adds_links_column_to_schema_4(tmp_path):
+    path = tmp_path / "v4.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE game_meta (bgg_id INTEGER PRIMARY KEY, shelf TEXT NOT NULL DEFAULT '');"
+        "INSERT INTO game_meta (bgg_id, shelf) VALUES (13, 'Regal 1');"
+    )
+    old.commit()
+    old.close()
+    s = Store(str(path))
+    try:
+        cols = {r["name"] for r in s._rows("PRAGMA table_info(game_meta)")}
+        assert "links" in cols
+        assert s._rows("SELECT links FROM game_meta WHERE bgg_id = 13") == [{"links": "[]"}]
+    finally:
+        s.close()
+
+
 def test_loans(store):
     asyncio.run(run_sync(FakeClient(), store, direct, NOW))
     store.lend(13, "Ben", "2026-08-01")
@@ -161,7 +186,7 @@ def test_migrates_schema_1(tmp_path):
     old.close()
     s = Store(str(path))
     try:
-        assert s.get_meta("schema") == "4"
+        assert s.get_meta("schema") == "5"
         assert s.players("susi") == [
             {"name": "Ben", "plays": 0, "from_bgg": False, "bgg_username": "", "dislikes": [], "hidden": False}
         ]

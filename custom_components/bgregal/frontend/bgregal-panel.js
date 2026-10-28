@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.5.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.6.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -420,6 +420,13 @@ class BgRegalPanel extends HTMLElement {
         <button class="link" data-a="rbdel" data-v="${g.bgg_id}|${esc(n)}">${t.delete}</button></li>`).join("")}</ul>` : `<div class="muted small">${t.noRulebooks}</div>`}
       <div class="row"><label class="button ${ui.rbUploading ? "disabled" : ""}">${ui.rbUploading ? t.uploading : t.uploadPdf}<input type="file" accept="application/pdf,.pdf" multiple hidden data-upload="${g.bgg_id}" ${ui.rbUploading ? "disabled" : ""}></label></div>
       <p class="muted small">${t.rulebooksHint}</p>
+      ${g.links.length ? `<div class="row">${g.links.map((l) => `<a class="button" href="${esc(l.url)}" target="_blank" rel="noreferrer">${esc(l.title)}</a>`).join("")}</div>` : ""}
+      <div class="links">${e.links.map((l, i) => `<div class="row">
+        <input placeholder="${t.linkTitle}" value="${esc(l.title)}" data-k="link.${i}.title">
+        <input type="url" placeholder="https://…" value="${esc(l.url)}" data-k="link.${i}.url">
+        <button class="link" data-a="linkdel" data-v="${i}">${t.remove}</button></div>`).join("")}</div>
+      <div class="row"><button data-a="linkadd">${t.addLink}</button><button class="primary" data-a="save" data-v="${g.bgg_id}">${t.save}</button></div>
+      <p class="muted small">${t.linksHint}</p>
 
       <h3>${t.loan}</h3>${loan}
       ${expansions.length ? `<h3>${t.expansions}</h3><ul class="plain">${expansions.map((x) => `<li><a href="#" data-a="open" data-v="${x.bgg_id}">${esc(x.name)}</a> <span class="muted small">${x.in_base ? t.inBaseShort : esc(location(x, t))}</span></li>`).join("")}</ul>` : ""}
@@ -469,6 +476,7 @@ class BgRegalPanel extends HTMLElement {
         <div class="row center">
           ${g.manual_url ? `<a class="button" href="${esc(g.manual_url)}" target="_blank" rel="noreferrer">${t.manual}</a>` : ""}
           ${this._rulebooks(s.bgg_id).map((n) => `<button data-a="rbopen" data-v="${s.bgg_id}|${esc(n)}">${esc(n.slice(0, -4))}</button>`).join("")}
+          ${(g.links || []).map((l) => `<a class="button" href="${esc(l.url)}" target="_blank" rel="noreferrer">${esc(l.title)}</a>`).join("")}
           <button class="primary" data-a="end">${t.endSession}</button>
           <button class="danger" data-a="cancel">${t.discard}</button>
         </div>
@@ -668,6 +676,7 @@ class BgRegalPanel extends HTMLElement {
     if (k === "lendTo") { ui.lendTo = v; this._render(); return; }
     if (k === "newPlayer") { ui.newPlayer = v; this._render(); return; }
     if (head === "edit") { ui.edit[rest[0]] = v; return; }
+    if (head === "link") { ui.edit.links[Number(rest[0])][rest[1]] = v; return; }
     if (head === "sh") { ui.shelfEdit[rest[0]] = v; if (rest[0] === "name") this._render(); return; }
     if (k.startsWith("scan.form.") && this._scan) {
       this._scan.form[k.slice(10)] = v;
@@ -753,6 +762,8 @@ class BgRegalPanel extends HTMLElement {
         await this._inventoryAction(a.slice(3)); return;
       case "scanassign": await this._assignScanned(); return;
       case "open": return this._openGame(Number(v));
+      case "linkadd": ui.edit.links.push({ title: "", url: "" }); break;
+      case "linkdel": ui.edit.links.splice(Number(v), 1); break;
       case "rbopen": { const [id, name] = v.split("|"); return this._openRules(Number(id), name); }
       case "rbdel": {
         const [id, name] = v.split("|");
@@ -768,6 +779,7 @@ class BgRegalPanel extends HTMLElement {
           bgg_id: Number(v), shelf: ed.shelf, compartment: ed.compartment === "" ? 0 : Number(ed.compartment),
           in_base: !!ed.in_base, nfc_tag: ed.nfc_tag, light_profile: ed.light_profile, playlist: ed.playlist,
           manual_url: ed.manual_url, ean: ed.ean,
+          links: ed.links.filter((l) => l.url.trim()).map((l) => ({ title: l.title.trim(), url: l.url.trim() })),
         });
         if (ok) this._showToast(t.saved);
         return;
@@ -1105,6 +1117,7 @@ class BgRegalPanel extends HTMLElement {
     this._ui.edit = {
       shelf: g.shelf, compartment: g.compartment ?? "", in_base: g.in_base, nfc_tag: g.nfc_tag,
       light_profile: g.light_profile, playlist: g.playlist, manual_url: g.manual_url, ean: g.ean,
+      links: g.links.map((l) => ({ ...l })),
     };
     this._render();
     try {

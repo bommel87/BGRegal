@@ -45,6 +45,10 @@ set_game:
       selector:
         text:
           type: url
+    links:
+      example: '[{"title": "Errata", "url": "https://example.com/errata.pdf"}]'
+      selector:
+        object:
     ean:
       example: "4002051693602"
       selector:

@@ -49,11 +49,18 @@ from .core import stats, suggest
 from .core.bgstats import auto_winners, play_url, qr_svg
 from .core.client import BggClient
 from .core.errors import BggError
+from .core.links import LinkCache
 from .core.rules import RuleBooks
 from .core.store import Store
 from .core.suggest import DISLIKE_OPTIONS
 from .core.sync import SyncResult
-from .core.util import normalize_ean, normalize_playlist, playlist_media_type, valid_light_profile
+from .core.util import (
+    normalize_ean,
+    normalize_links,
+    normalize_playlist,
+    playlist_media_type,
+    valid_light_profile,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +74,7 @@ class BgRegal:
         self.client = client
         self.store = store
         self.rules = RuleBooks(hass.config.path(RULES_DIR))
+        self.links = LinkCache(hass.config.path(RULES_DIR))
         self.snapshot: dict[str, Any] = {}
         self.suggestion: dict[str, Any] = {"phase": "idle"}
         self._queue: list[dict[str, Any]] = []
@@ -318,6 +326,11 @@ class BgRegal:
             if ean is None:
                 raise ServiceValidationError("Die EAN muss 8, 12, 13 oder 14 Ziffern haben")
             clean["ean"] = ean
+        if "links" in fields:
+            try:
+                clean["links"] = json.dumps(normalize_links(fields["links"] or []), ensure_ascii=False)
+            except ValueError as err:
+                raise ServiceValidationError(f"Ungültiger Link: {err}") from err
         for key, lookup, label in (
             ("nfc_tag", self.store.game_by_tag, "Der Tag"),
             ("ean", self.store.game_by_ean, "Die EAN"),

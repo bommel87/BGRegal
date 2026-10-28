@@ -51,6 +51,8 @@ your Assist agent an LLM (e.g. the Anthropic integration with your own API key) 
 under *Configure → Control Home Assistant*. Then ask Assist, e.g. "Can the robber go on the desert in Catan?". Without
 a game name it means the game of the running session. The LLM only answers from the rulebook, cites the page and
 says when the rulebook doesn't cover it. Scanned PDFs without a text layer can't be read; max. 100 MB per file.
+Below the PDFs you can add any number of **links** (errata, FAQ, almanac). Assist reads the pages or PDFs behind them
+too, errata first; the text is cached for 7 days. Pages behind a login or rendered by JavaScript often yield no text.
 
 ## Dashboard card
 

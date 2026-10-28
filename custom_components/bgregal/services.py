@@ -34,6 +34,9 @@ SCHEMAS: dict[str, vol.Schema] = {
             vol.Optional("playlist"): vol.Any(None, cv.string),
             vol.Optional("manual_url"): vol.Any(None, cv.string),
             vol.Optional("ean"): vol.Any(None, vol.Coerce(str)),
+            vol.Optional("links"): vol.Any(None, vol.All(cv.ensure_list, [vol.Schema(
+                {vol.Optional("title", default=""): vol.Any(None, cv.string), vol.Required("url"): cv.string}
+            )])),
         }
     ),
     "scan_code": vol.Schema({vol.Required("code"): vol.Coerce(str)}),

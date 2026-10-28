@@ -191,6 +191,10 @@
           "name": "Anleitung",
           "description": "Link zur Spielanleitung."
         },
+        "links": {
+          "name": "Links",
+          "description": "Weitere Links wie Errata, FAQ oder Almanach: Liste aus title und url. Assist liest sie bei Regelfragen mit."
+        },
         "ean": {
           "name": "EAN",
           "description": "Barcode auf der Schachtel (8, 12, 13 oder 14 Ziffern)."

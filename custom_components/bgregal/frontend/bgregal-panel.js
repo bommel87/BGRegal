@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.7.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.7.1";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -392,6 +392,73 @@ class BgRegalPanel extends HTMLElement {
       : `<div class="row"><input list="bgr-players" placeholder="${t.borrower}" value="${esc(ui.lendTo)}" data-k="lendTo"><button data-a="lend" data-v="${g.bgg_id}" ${ui.lendTo.trim() ? "" : "disabled"}>${t.lend}</button></div>
          <datalist id="bgr-players">${this._activePlayers().map((p) => `<option value="${esc(p.name)}">`).join("")}</datalist>`;
 
+    // ---- Übersicht: ansehen und benutzen ----
+    const where = g.in_box
+      ? `${t.inBoxShort} <a href="#" data-a="open" data-v="${g.in_box}">${esc(g.box_name)}</a>${g.shelf ? ` · ${esc(location(g, t))}` : ""}`
+      : esc(location(g, t)) || `<span class="muted">${t.noLocation}</span>`;
+    const helpButtons = [
+      ...rulebooks.map((n) => `<button data-a="rbopen" data-v="${g.bgg_id}|${esc(n)}">📄 ${esc(n.slice(0, -4))}</button>`),
+      ...g.links.map((l) => `<a class="button" href="${esc(l.url)}" target="_blank" rel="noreferrer">🔗 ${esc(l.title)}</a>`),
+      ...(g.manual_url ? [`<a class="button" href="${esc(g.manual_url)}" target="_blank" rel="noreferrer">🔗 ${t.manual}</a>`] : []),
+    ];
+    const overview = `
+      <section class="gsec"><h3>${t.whereSection}</h3>
+        <p>${where}</p>
+        <h4>${t.loan}</h4>${loan}
+      </section>
+      <section class="gsec"><h3>${t.rulebooks}</h3>
+        ${helpButtons.length ? `<div class="row">${helpButtons.join("")}</div>`
+          : `<p class="muted small">${t.noHelpYet} <a href="#" data-a="gametab" data-v="setup">${t.tabSetup}</a></p>`}
+      </section>
+      ${expansions.length || contents.length ? `<section class="gsec"><h3>${t.expansions}</h3>
+        <ul class="plain">${expansions.map((x) => `<li><a href="#" data-a="open" data-v="${x.bgg_id}">${esc(x.name)}</a> <span class="muted small">${x.in_box ? `${t.inBoxShort} ${esc(x.box_name)}` : esc(location(x, t))}</span></li>`).join("")}</ul>
+        ${contents.length ? `<h4>${t.boxContents}</h4><ul class="plain">${contents.map((x) => `<li><a href="#" data-a="open" data-v="${x.bgg_id}">${esc(x.name)}</a></li>`).join("")}</ul>` : ""}
+      </section>` : ""}
+      <section class="gsec"><h3>${t.recentPlays}</h3>${plays}</section>`;
+
+    // ---- Einrichten: alles Bearbeitbare, ein Speichern ----
+    const setup = `
+      <section class="gsec"><h3>${t.whereSection}</h3>
+        <div class="form">
+          ${g.expansion ? `<label>${t.inBox}<select data-k="edit.in_box"><option value="">${t.ownPlace}</option>${boxes.map((b) =>
+            `<option value="${b.bgg_id}" ${String(b.bgg_id) === String(e.in_box) ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></label>` : ""}
+          ${e.in_box ? `<p class="muted small">${t.boxLocationHint}</p>` : `
+          <label>${t.shelf}<input list="bgr-shelves" value="${esc(e.shelf)}" data-k="edit.shelf"></label>
+          <datalist id="bgr-shelves">${shelves.map((s) => `<option value="${esc(s)}">`).join("")}</datalist>
+          <label>${t.compartment}<input type="number" min="0" max="50" value="${esc(e.compartment)}" data-k="edit.compartment"></label>`}
+        </div>
+      </section>
+      <section class="gsec"><h3>${t.recognizeSection}</h3>
+        <div class="form">
+          <label>${t.nfc}<span class="row"><input value="${esc(e.nfc_tag)}" data-k="edit.nfc_tag"><button data-a="scanned" data-v="${g.bgg_id}">${t.takeScanned}</button></span></label>
+          <label>${t.ean}<span class="row"><input inputmode="numeric" placeholder="4002051693602" value="${esc(e.ean)}" data-k="edit.ean"><button data-a="scanean" title="${t.scanEan}">${BARCODE_ICON}</button></span></label>
+        </div>
+      </section>
+      <section class="gsec"><h3>${t.moodSection}</h3>
+        <div class="form">
+          <label>${t.light}<select data-k="edit.light_profile"><option value="">–</option>${profiles.map((p) => `<option value="${esc(p)}" ${p === e.light_profile ? "selected" : ""}>${esc(this._hass.states[p].attributes.friendly_name || p)}</option>`).join("")}</select></label>
+          <label>${t.sound}<input placeholder="https://open.spotify.com/playlist/…" value="${esc(e.playlist)}" data-k="edit.playlist"></label>
+        </div>
+        ${this._data.options.media_player ? "" : `<p class="muted small">${t.noPlayerHint}</p>`}
+      </section>
+      <section class="gsec"><h3>${t.rulebooks}</h3>
+        <h4>${t.pdfs}</h4>
+        ${rulebooks.length ? `<ul class="plain">${rulebooks.map((n) => `<li><a href="#" data-a="rbopen" data-v="${g.bgg_id}|${esc(n)}">${esc(n.slice(0, -4))}</a>
+          <button class="link" data-a="rbdel" data-v="${g.bgg_id}|${esc(n)}">${t.delete}</button></li>`).join("")}</ul>` : `<p class="muted small">${t.noRulebooks}</p>`}
+        <div class="row"><label class="button ${ui.rbUploading ? "disabled" : ""}">${ui.rbUploading ? t.uploading : t.uploadPdf}<input type="file" accept="application/pdf,.pdf" multiple hidden data-upload="${g.bgg_id}" ${ui.rbUploading ? "disabled" : ""}></label></div>
+        <p class="muted small">${t.rulebooksHint}</p>
+        <h4>${t.linksTitle}</h4>
+        <div class="form"><label>${t.manual}<input type="url" placeholder="https://…" value="${esc(e.manual_url)}" data-k="edit.manual_url"></label></div>
+        ${e.links.map((l, i) => `<div class="row">
+          <input placeholder="${t.linkTitle}" value="${esc(l.title)}" data-k="link.${i}.title">
+          <input type="url" placeholder="https://…" value="${esc(l.url)}" data-k="link.${i}.url">
+          <button class="link" data-a="linkdel" data-v="${i}">${t.remove}</button></div>`).join("")}
+        <div class="row"><button data-a="linkadd">${t.addLink}</button></div>
+        <p class="muted small">${t.linksHint}</p>
+      </section>
+      <div class="savebar"><button class="primary" data-a="save" data-v="${g.bgg_id}">${t.save}</button></div>`;
+
+    const tab = ui.gameTab || "overview";
     return `<div class="overlay" data-a="close"><div class="dialog" role="dialog" aria-modal="true" data-stop="1">
       <button class="icon close" data-a="close" aria-label="${t.close}">✕</button>
       <div class="ghead">
@@ -404,45 +471,14 @@ class BgRegalPanel extends HTMLElement {
             ${g.last_players.length ? `<span>${esc(playersText(g.last_players, this._data.me))}</span>` : ""}</div>
           <div class="row">
             <button class="primary" data-a="start" data-v="${g.bgg_id}" ${session && session.state === "running" ? "disabled" : ""}>${t.startSession}</button>
-            ${g.manual_url ? `<a class="button" href="${esc(g.manual_url)}" target="_blank" rel="noreferrer">${t.manual}</a>` : ""}
             <a class="button" href="https://boardgamegeek.com/boardgame/${g.bgg_id}" target="_blank" rel="noreferrer">BGG</a>
           </div>
         </div>
       </div>
-
-      <h3>${t.assignments}</h3>
-      <div class="form">
-        <label>${t.shelf}<input list="bgr-shelves" value="${esc(e.shelf)}" data-k="edit.shelf"></label>
-        <datalist id="bgr-shelves">${shelves.map((s) => `<option value="${esc(s)}">`).join("")}</datalist>
-        <label>${t.compartment}<input type="number" min="0" max="50" value="${esc(e.compartment)}" data-k="edit.compartment"></label>
-        ${g.expansion ? `<label>${t.inBox}<select data-k="edit.in_box"><option value="">${t.ownPlace}</option>${boxes.map((b) =>
-          `<option value="${b.bgg_id}" ${String(b.bgg_id) === String(e.in_box) ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></label>` : ""}
-        <label>${t.nfc}<span class="row"><input value="${esc(e.nfc_tag)}" data-k="edit.nfc_tag"><button data-a="scanned" data-v="${g.bgg_id}">${t.takeScanned}</button></span></label>
-        <label>${t.ean}<span class="row"><input inputmode="numeric" placeholder="4002051693602" value="${esc(e.ean)}" data-k="edit.ean"><button data-a="scanean" title="${t.scanEan}">${BARCODE_ICON}</button></span></label>
-        <label>${t.light}<select data-k="edit.light_profile"><option value="">–</option>${profiles.map((p) => `<option value="${esc(p)}" ${p === e.light_profile ? "selected" : ""}>${esc(this._hass.states[p].attributes.friendly_name || p)}</option>`).join("")}</select></label>
-        <label>${t.sound}<input placeholder="https://open.spotify.com/playlist/…" value="${esc(e.playlist)}" data-k="edit.playlist"></label>
-        <label>${t.manual}<input type="url" placeholder="https://…" value="${esc(e.manual_url)}" data-k="edit.manual_url"></label>
+      <div class="chips gtabs" role="tablist">
+        ${["overview", "setup"].map((k) => `<button class="chip ${tab === k ? "on" : ""}" role="tab" aria-selected="${tab === k}" data-a="gametab" data-v="${k}">${k === "overview" ? t.tabOverview : t.tabSetup}</button>`).join("")}
       </div>
-      ${this._data.options.media_player ? "" : `<p class="muted small">${t.noPlayerHint}</p>`}
-      <div class="row"><button class="primary" data-a="save" data-v="${g.bgg_id}">${t.save}</button></div>
-
-      <h3>${t.rulebooks}</h3>
-      ${rulebooks.length ? `<ul class="plain">${rulebooks.map((n) => `<li><a href="#" data-a="rbopen" data-v="${g.bgg_id}|${esc(n)}">${esc(n.slice(0, -4))}</a>
-        <button class="link" data-a="rbdel" data-v="${g.bgg_id}|${esc(n)}">${t.delete}</button></li>`).join("")}</ul>` : `<div class="muted small">${t.noRulebooks}</div>`}
-      <div class="row"><label class="button ${ui.rbUploading ? "disabled" : ""}">${ui.rbUploading ? t.uploading : t.uploadPdf}<input type="file" accept="application/pdf,.pdf" multiple hidden data-upload="${g.bgg_id}" ${ui.rbUploading ? "disabled" : ""}></label></div>
-      <p class="muted small">${t.rulebooksHint}</p>
-      ${g.links.length ? `<div class="row">${g.links.map((l) => `<a class="button" href="${esc(l.url)}" target="_blank" rel="noreferrer">${esc(l.title)}</a>`).join("")}</div>` : ""}
-      <div class="links">${e.links.map((l, i) => `<div class="row">
-        <input placeholder="${t.linkTitle}" value="${esc(l.title)}" data-k="link.${i}.title">
-        <input type="url" placeholder="https://…" value="${esc(l.url)}" data-k="link.${i}.url">
-        <button class="link" data-a="linkdel" data-v="${i}">${t.remove}</button></div>`).join("")}</div>
-      <div class="row"><button data-a="linkadd">${t.addLink}</button><button class="primary" data-a="save" data-v="${g.bgg_id}">${t.save}</button></div>
-      <p class="muted small">${t.linksHint}</p>
-
-      <h3>${t.loan}</h3>${loan}
-      ${expansions.length ? `<h3>${t.expansions}</h3><ul class="plain">${expansions.map((x) => `<li><a href="#" data-a="open" data-v="${x.bgg_id}">${esc(x.name)}</a> <span class="muted small">${x.in_box ? `${t.inBoxShort} ${esc(x.box_name)}` : esc(location(x, t))}</span></li>`).join("")}</ul>` : ""}
-      ${contents.length ? `<h3>${t.boxContents}</h3><ul class="plain">${contents.map((x) => `<li><a href="#" data-a="open" data-v="${x.bgg_id}">${esc(x.name)}</a></li>`).join("")}</ul>` : ""}
-      <h3>${t.recentPlays}</h3>${plays}
+      ${tab === "overview" ? overview : setup}
     </div></div>`;
   }
 
@@ -687,7 +723,7 @@ class BgRegalPanel extends HTMLElement {
     if (k === "search") { ui.search = v; this._render(); this._scrollToHit(); return; }
     if (k === "lendTo") { ui.lendTo = v; this._render(); return; }
     if (k === "newPlayer") { ui.newPlayer = v; this._render(); return; }
-    if (head === "edit") { ui.edit[rest[0]] = v; return; }
+    if (head === "edit") { ui.edit[rest[0]] = v; if (rest[0] === "in_box") this._render(); return; }
     if (head === "link") { ui.edit.links[Number(rest[0])][rest[1]] = v; return; }
     if (head === "sh") { ui.shelfEdit[rest[0]] = v; if (rest[0] === "name") this._render(); return; }
     if (k.startsWith("scan.form.") && this._scan) {
@@ -774,6 +810,7 @@ class BgRegalPanel extends HTMLElement {
         await this._inventoryAction(a.slice(3)); return;
       case "scanassign": await this._assignScanned(); return;
       case "open": return this._openGame(Number(v));
+      case "gametab": ui.gameTab = v; break;
       case "linkadd": ui.edit.links.push({ title: "", url: "" }); break;
       case "linkdel": ui.edit.links.splice(Number(v), 1); break;
       case "rbopen": { const [id, name] = v.split("|"); return this._openRules(Number(id), name); }
@@ -1125,6 +1162,7 @@ class BgRegalPanel extends HTMLElement {
     const g = this._games.get(bggId);
     if (!g) return;
     this._ui.game = bggId;
+    this._ui.gameTab = "overview";
     this._ui.gamePlays = null;
     this._ui.lendTo = "";
     this._ui.edit = {
@@ -1204,6 +1242,12 @@ const CSS = `
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chips.center, .session .chips { justify-content: center; }
   .chip { border-radius: 16px; padding: 4px 12px; font-size: 13px; }
+  .gtabs { margin: 16px 0 4px; border-bottom: 1px solid var(--divider-color); padding-bottom: 12px; }
+  .gsec { padding: 4px 0 8px; }
+  .gsec h3 { margin-top: 16px; }
+  .gsec h4 { font-size: 13px; margin: 12px 0 6px; color: var(--secondary-text-color); }
+  .savebar { position: sticky; bottom: -16px; background: var(--card-background-color, #fff); padding: 12px 0;
+             border-top: 1px solid var(--divider-color); display: flex; justify-content: flex-end; }
   .chip.on { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
   .muted { color: var(--secondary-text-color); }
   .small { font-size: 12px; }

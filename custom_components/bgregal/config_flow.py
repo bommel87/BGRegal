@@ -10,6 +10,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    CONF_AI_TASK,
     CONF_END_SCENE,
     CONF_LOAN_DAYS,
     CONF_LONG_MONTHS,
@@ -76,7 +77,7 @@ class BgRegalOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
             # Leere Auswahlfelder kommen gar nicht mit -> als "nicht gesetzt" speichern
-            for key in (CONF_MEDIA_PLAYER, CONF_END_SCENE, CONF_NOTIFY):
+            for key in (CONF_MEDIA_PLAYER, CONF_END_SCENE, CONF_NOTIFY, CONF_AI_TASK):
                 user_input.setdefault(key, "")
             return self.async_create_entry(data=user_input)
 
@@ -108,6 +109,9 @@ class BgRegalOptionsFlow(OptionsFlow):
                 ),
                 optional(CONF_NOTIFY): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=notify_services, custom_value=True)
+                ),
+                optional(CONF_AI_TASK): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="ai_task")
                 ),
             }
         )

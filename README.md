@@ -92,6 +92,19 @@ Es funktioniert mit Kamera, Barcode-Scanner oder NFC-Tag.
 - Während der Inventur starten Scans keine Sitzung, auch NFC-Tags aus der Home-Assistant-App nicht. Nach 10 Minuten
   ohne Scan endet die Inventur von selbst.
 
+### Regal-Scanner per Foto
+
+Im Startformular der Inventur fotografiert **Foto vom Regal** ein ganzes, schon angelegtes Regal (bei großen Regalen
+mehrere Fotos). Eine KI erkennt die Spiele an den Kartonrücken und ordnet sie den Fächern zu; die Fachböden sollten
+auf dem Foto zu sehen sein.
+
+- Voraussetzung ist eine KI in Home Assistant, die Bilder lesen kann (AI Task, z. B. die Anthropic-Integration mit
+  Claude). Welche genutzt wird, stellst du in den Optionen von BGRegal ein; leer = die in Home Assistant bevorzugte.
+- Das Ergebnis ist nach Fächern gegliedert: **passt**, **umgezogen** (laut BGRegal woanders), **unsicher** (zur Auswahl)
+  und **nicht in der Sammlung** (nur Hinweis). Erkannte, aber fehlende Spiele kannst du auf „Ohne Standort“ setzen.
+- Erst **Übernehmen** ändert etwas: Fach und Reihenfolge von links nach rechts. Ein Foto-Scan startet keine Sitzung.
+- Das Foto geht nur zur Erkennung an die KI und wird danach gelöscht.
+
 ### EAN-Barcode
 
 Statt eines NFC-Tags (oder zusätzlich) kannst du den Barcode auf der Schachtel nutzen. Oben im Panel öffnet das
@@ -171,6 +184,8 @@ Alle Dienste liegen unter `bgregal.*`; ein Spiel gibst du mit `bgg_id` oder `nam
 | `set_shelf` / `remove_shelf` | Regal: `area_id`, `compartments`, `compartment_1_bottom`, `game_sort`, `new_name` |
 | `set_sort_order` | Reihenfolge: `kind` (`rooms`/`shelves`/`games`) und `order` |
 | `start_inventory` / `inventory_place` / `inventory_undo` / `inventory_next` / `stop_inventory` | Inventur; `clear_missing` setzt nicht gescannte Spiele des Fachs auf „Ohne Standort“ |
+| `scan_shelf_photo` | Fotos (`images`, Medien-IDs) eines Regals per KI auswerten; ändert nichts |
+| `apply_shelf_scan` | erkannte Spiele (`games`: `bgg_id`, `compartment`) ins Regal stellen; `clear_missing` |
 | `assign_scanned_tag` | zuletzt gescannten Tag zuordnen |
 | `lend_game` / `return_game` | verleihen (`borrower`) / zurück |
 | `start_session` / `end_session` / `cancel_session` | Sitzung; ohne Spiel startet der angenommene Vorschlag |

@@ -82,6 +82,17 @@ SERVICES = {
                        "Inventur beenden", "Beendet die Inventur; Scans starten wieder Sitzungen.", {
         "clear_missing": ("Clear unscanned", "Games that were in the current compartment but not scanned get no location.",
                           "Nicht gescannte leeren", "Spiele, die im aktuellen Fach standen, aber nicht gescannt wurden, bekommen keinen Standort.")}),
+    "scan_shelf_photo": ("Scan shelf by photo", "Recognizes the games on photos of a whole shelf with AI and matches them with the collection. Changes nothing.",
+                         "Regal per Foto scannen", "Erkennt die Spiele auf Fotos eines ganzen Regals per KI und gleicht sie mit der Sammlung ab. Ändert nichts.", {
+        "shelf": ("Shelf", "Name of the shelf.", "Regal", "Name des Regals."),
+        "images": ("Photos", "Media IDs of the photos (media-source://…).", "Fotos", "Medien-IDs der Fotos (media-source://…).")}),
+    "apply_shelf_scan": ("Apply photo scan", "Puts the confirmed games on the shelf; the list order becomes the order in the compartment.",
+                         "Foto-Scan übernehmen", "Stellt die bestätigten Spiele ins Regal; die Reihenfolge der Liste wird die Reihenfolge im Fach.", {
+        "shelf": ("Shelf", "Name of the shelf.", "Regal", "Name des Regals."),
+        "games": ("Games", "List of bgg_id and compartment, per compartment from left to right.",
+                  "Spiele", "Liste aus bgg_id und compartment, je Fach von links nach rechts."),
+        "clear_missing": ("Clear unrecognized", "Games that were on the shelf according to BGRegal but aren't in the list get no location.",
+                          "Nicht erkannte leeren", "Spiele, die laut BGRegal im Regal standen, aber nicht in der Liste sind, bekommen keinen Standort.")}),
     "assign_scanned_tag": ("Assign scanned tag", "Assign the tag scanned in the last 10 minutes.",
                            "Gescannten Tag zuordnen", "Ordnet den in den letzten 10 Minuten gescannten Tag zu.", GAME_FIELDS),
     "lend_game": ("Lend game", "Mark a game as lent.", "Spiel verleihen", "Markiert ein Spiel als verliehen.", {
@@ -195,6 +206,8 @@ OPTIONS = {
     "loan_reminder_days": ("Loan reminder after", "Verleih-Erinnerung nach", "Days until a reminder about a lent game.", "Tage bis zur Erinnerung an ein verliehenes Spiel."),
     "long_unplayed_months": ("Long unplayed after", "„Lange nicht gespielt“ ab", "Months since the last play.", "Monate seit der letzten Partie."),
     "notify_service": ("Also notify", "Zusätzlich benachrichtigen", "Optional notify service, e.g. your phone.", "Optionaler Benachrichtigungsdienst, z. B. dein Handy."),
+    "ai_task_entity": ("AI for the shelf scanner", "KI für den Regal-Scanner", "AI Task entity that reads photos of a shelf. Empty = the one preferred in Home Assistant.",
+                       "AI-Task-Entität, die Fotos vom Regal auswertet. Leer = die in Home Assistant bevorzugte."),
 }
 
 

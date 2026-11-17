@@ -496,3 +496,55 @@ async def test_unload(hass: HomeAssistant, regal) -> None:
     entry = regal.entry
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert entry.state is ConfigEntryState.NOT_LOADED
+
+
+async def test_shelf_photo(hass: HomeAssistant, regal) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    from homeassistant.components.media_source import MediaSourceItem
+
+    from custom_components.bgregal.media_source import DATA_PHOTOS, PhotoSource
+
+    await hass.services.async_call(DOMAIN, "set_shelf", {"name": "Billy", "compartments": 2}, blocking=True)
+    await hass.services.async_call(DOMAIN, "set_game", {"bgg_id": 822, "shelf": "Billy", "compartment": 1}, blocking=True)
+    seen = {}
+
+    async def fake_generate(hass_, **kwargs):
+        # Das Foto ist während der Erkennung als Medienquelle lesbar
+        key = kwargs["attachments"][0]["media_content_id"].rsplit("/", 1)[1]
+        media = await PhotoSource(hass_).async_resolve_media(MediaSourceItem(hass_, DOMAIN, key, None))
+        seen["bytes"] = media.path.read_bytes()
+        seen["path"] = media.path
+        seen["instructions"] = kwargs["instructions"]
+        return type("Result", (), {"data": '{"compartments": [{"compartment": 2, "games": ['
+                                           '{"title": "Catan", "confidence": 0.9}, {"title": "Azul"}]}]}'})()
+
+    with pytest.raises(ServiceValidationError):  # ohne KI geht es nicht
+        await regal.async_scan_shelf_upload("Billy", [(b"jpg", "image/jpeg")])
+    hass.config.components.add("ai_task")
+    # Ersatz für HA AI Task (braucht im echten HA die Conversation-Integration)
+    fake_ai_task = SimpleNamespace(async_generate_data=fake_generate)
+    with patch.dict(sys.modules, {"homeassistant.components.ai_task": fake_ai_task}):
+        result = await regal.async_scan_shelf_upload("billy", [(b"jpg", "image/jpeg")])
+    assert seen["bytes"] == b"jpg" and not seen["path"].exists()  # danach verworfen
+    assert hass.data[DATA_PHOTOS] == {}
+    assert "„Billy“ hat 2 Fächer" in seen["instructions"]
+    assert [(i["title"], i["status"]) for i in result["items"]] == [("Catan", "moved"), ("Azul", "unknown")]
+    assert [m["name"] for m in result["missing"]] == ["Carcassonne"]
+
+    res = await hass.services.async_call(
+        DOMAIN, "apply_shelf_scan",
+        {"shelf": "Billy", "games": [{"bgg_id": 13, "compartment": 2}], "clear_missing": True},
+        blocking=True, return_response=True,
+    )
+    assert res == {"placed": 1, "cleared": ["Carcassonne"]}
+    catan = regal.find_game(13)
+    assert (catan["shelf"], catan["compartment"], catan["position"]) == ("Billy", 2, 0)
+    assert regal.find_game(822)["shelf"] == ""
+    assert hass.states.get("sensor.bgregal_sitzung").state == "idle"  # startet keine Sitzung
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "apply_shelf_scan", {"shelf": "Billy", "games": [{"bgg_id": 13, "compartment": 5}]},
+            blocking=True, return_response=True,
+        )

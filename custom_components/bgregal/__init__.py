@@ -20,6 +20,7 @@ from .const import CONF_TOKEN, CONF_USERNAME, DB_FILE, DOMAIN, PANEL_URL, STATIC
 from .coordinator import BgRegalCoordinator
 from .core.client import BggClient
 from .core.store import Store
+from .http_photo import ShelfPhotoView
 from .http_rules import RulesFileView, RulesUploadView
 from .http_vote import VoteApiView, VotePageView
 from .llm_api import async_setup_llm_api
@@ -36,7 +37,8 @@ type BgRegalConfigEntry = ConfigEntry[BgRegalCoordinator]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Einmalig: Dateien fürs Panel, Dashboard-Kachel, Dienste, WebSocket, Abstimmseite, Anleitungen, LLM-API."""
+    """Einmalig: Dateien fürs Panel, Dashboard-Kachel, Dienste, WebSocket, Abstimmseite, Anleitungen,
+    Regal-Scanner, LLM-API."""
     await hass.http.async_register_static_paths(
         [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend"), False)]
     )
@@ -47,6 +49,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.http.register_view(VoteApiView())
     hass.http.register_view(RulesUploadView())
     hass.http.register_view(RulesFileView())
+    hass.http.register_view(ShelfPhotoView())
     async_setup_llm_api(hass)
     return True
 

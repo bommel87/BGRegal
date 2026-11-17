@@ -11,7 +11,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import DOMAIN, PHOTO_MAX_COUNT
 from .core.store import GAME_SORTS
 from .core.suggest import DISLIKE_OPTIONS, GAME_TYPES, MODES
 from .runtime import BgRegal
@@ -70,6 +70,21 @@ SCHEMAS: dict[str, vol.Schema] = {
         }
     ),
     "stop_inventory": vol.Schema({vol.Optional("clear_missing", default=False): cv.boolean}),
+    "scan_shelf_photo": vol.Schema(
+        {
+            vol.Required("shelf"): cv.string,
+            vol.Required("images"): vol.All(cv.ensure_list, [cv.string], vol.Length(min=1, max=PHOTO_MAX_COUNT)),
+        }
+    ),
+    "apply_shelf_scan": vol.Schema(
+        {
+            vol.Required("shelf"): cv.string,
+            vol.Required("games"): vol.All(cv.ensure_list, [vol.Schema(
+                {vol.Required("bgg_id"): vol.Coerce(int), vol.Required("compartment"): vol.Coerce(int)}
+            )]),
+            vol.Optional("clear_missing", default=False): cv.boolean,
+        }
+    ),
     "assign_scanned_tag": vol.Schema(GAME),
     "lend_game": vol.Schema({**GAME, vol.Required("borrower"): cv.string}),
     "return_game": vol.Schema(GAME),
@@ -148,6 +163,8 @@ RESPONSES = {
     "inventory_undo": SupportsResponse.OPTIONAL,
     "inventory_next": SupportsResponse.OPTIONAL,
     "stop_inventory": SupportsResponse.OPTIONAL,
+    "scan_shelf_photo": SupportsResponse.ONLY,
+    "apply_shelf_scan": SupportsResponse.OPTIONAL,
     "finish_session": SupportsResponse.OPTIONAL,
     "session_qr": SupportsResponse.ONLY,
     "suggest": SupportsResponse.OPTIONAL,
@@ -201,6 +218,10 @@ async def _handle(regal: BgRegal, service: str, d: dict[str, Any]) -> dict[str, 
             return await regal.async_inventory_next(d["clear_missing"], d.get("compartment"))
         case "stop_inventory":
             return await regal.async_stop_inventory(d["clear_missing"])
+        case "scan_shelf_photo":
+            return await regal.async_scan_shelf_photo(d["shelf"], d["images"])
+        case "apply_shelf_scan":
+            return await regal.async_apply_shelf_scan(d["shelf"], d["games"], d["clear_missing"])
         case "assign_scanned_tag":
             return {"nfc_tag": await regal.async_assign_scanned_tag(_game(regal, d))}
         case "lend_game":

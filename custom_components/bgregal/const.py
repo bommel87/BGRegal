@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "bgregal"
-VERSION = "0.7.1"
+VERSION = "0.8.0"
 
 CONF_USERNAME = "username"
 CONF_TOKEN = "token"
@@ -13,6 +13,7 @@ CONF_END_SCENE = "end_scene"
 CONF_LOAN_DAYS = "loan_reminder_days"
 CONF_LONG_MONTHS = "long_unplayed_months"
 CONF_NOTIFY = "notify_service"
+CONF_AI_TASK = "ai_task_entity"
 
 DEFAULTS = {
     CONF_SCAN_HOURS: 6,
@@ -21,6 +22,7 @@ DEFAULTS = {
     CONF_LOAN_DAYS: 60,
     CONF_LONG_MONTHS: 24,
     CONF_NOTIFY: "",
+    CONF_AI_TASK: "",
 }
 
 DB_FILE = "bgregal.db"
@@ -39,3 +41,5 @@ TAG_MAX_AGE_MIN = 10  # gescannter Tag gilt so lange für „Gescannten überneh
 LOAN_REPEAT_DAYS = 30  # nach der ersten Erinnerung alle 30 Tage erneut
 EVENING_CANDIDATES = 8
 INVENTORY_TIMEOUT_MIN = 10  # Inventur endet nach so vielen Minuten ohne Scan
+PHOTO_MAX_BYTES = 20 * 1024 * 1024  # je Foto beim Regal-Scanner
+PHOTO_MAX_COUNT = 6

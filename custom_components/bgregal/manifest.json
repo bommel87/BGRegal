@@ -1,7 +1,7 @@
 {
   "domain": "bgregal",
   "name": "BGRegal",
-  "after_dependencies": ["tag", "media_player"],
+  "after_dependencies": ["tag", "media_player", "media_source", "ai_task"],
   "codeowners": ["@bommel87"],
   "config_flow": true,
   "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
@@ -11,5 +11,5 @@
   "issue_tracker": "https://github.com/bommel87/BGRegal/issues",
   "requirements": ["segno==1.6.6", "pypdf>=5.1.0"],
   "single_config_entry": true,
-  "version": "0.7.1"
+  "version": "0.8.0"
 }

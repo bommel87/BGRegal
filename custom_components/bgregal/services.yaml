@@ -377,3 +377,33 @@ inventory_next:
 stop_inventory:
   fields:
     clear_missing: *clear_missing
+
+scan_shelf_photo:
+  fields:
+    shelf:
+      required: true
+      example: Regal 1
+      selector:
+        text:
+    images:
+      required: true
+      example: '["media-source://media_source/local/regal.jpg"]'
+      selector:
+        object:
+
+apply_shelf_scan:
+  fields:
+    shelf:
+      required: true
+      example: Regal 1
+      selector:
+        text:
+    games:
+      required: true
+      example: '[{"bgg_id": 13, "compartment": 1}, {"bgg_id": 822, "compartment": 1}]'
+      selector:
+        object:
+    clear_missing:
+      default: false
+      selector:
+        boolean:

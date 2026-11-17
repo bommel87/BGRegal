@@ -30,7 +30,8 @@
           "end_scene": "Scene at session end",
           "loan_reminder_days": "Loan reminder after",
           "long_unplayed_months": "Long unplayed after",
-          "notify_service": "Also notify"
+          "notify_service": "Also notify",
+          "ai_task_entity": "AI for the shelf scanner"
         },
         "data_description": {
           "scan_interval_hours": "Hours between two syncs with BGG.",
@@ -38,7 +39,8 @@
           "end_scene": "Scene or script, e.g. normal light.",
           "loan_reminder_days": "Days until a reminder about a lent game.",
           "long_unplayed_months": "Months since the last play.",
-          "notify_service": "Optional notify service, e.g. your phone."
+          "notify_service": "Optional notify service, e.g. your phone.",
+          "ai_task_entity": "AI Task entity that reads photos of a shelf. Empty = the one preferred in Home Assistant."
         }
       }
     }
@@ -322,6 +324,38 @@
         "clear_missing": {
           "name": "Clear unscanned",
           "description": "Games that were in the current compartment but not scanned get no location."
+        }
+      }
+    },
+    "scan_shelf_photo": {
+      "name": "Scan shelf by photo",
+      "description": "Recognizes the games on photos of a whole shelf with AI and matches them with the collection. Changes nothing.",
+      "fields": {
+        "shelf": {
+          "name": "Shelf",
+          "description": "Name of the shelf."
+        },
+        "images": {
+          "name": "Photos",
+          "description": "Media IDs of the photos (media-source://…)."
+        }
+      }
+    },
+    "apply_shelf_scan": {
+      "name": "Apply photo scan",
+      "description": "Puts the confirmed games on the shelf; the list order becomes the order in the compartment.",
+      "fields": {
+        "shelf": {
+          "name": "Shelf",
+          "description": "Name of the shelf."
+        },
+        "games": {
+          "name": "Games",
+          "description": "List of bgg_id and compartment, per compartment from left to right."
+        },
+        "clear_missing": {
+          "name": "Clear unrecognized",
+          "description": "Games that were on the shelf according to BGRegal but aren't in the list get no location."
         }
       }
     },

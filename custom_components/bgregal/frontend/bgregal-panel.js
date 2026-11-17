@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.7.1";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.8.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -715,6 +715,10 @@ class BgRegalPanel extends HTMLElement {
       if (e.type === "change") this._uploadRules(Number(e.target.dataset.upload), [...e.target.files]);
       return;
     }
+    if (["photo", "photopick", "photosel", "photoclear"].some((key) => key in (e.target.dataset || {}))) {
+      this._photoInput(e);
+      return;
+    }
     const k = e.target.dataset?.k;
     if (!k) return;
     const v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
@@ -730,6 +734,8 @@ class BgRegalPanel extends HTMLElement {
       this._scan.form[k.slice(10)] = v;
       const btn = this.shadowRoot.querySelector('[data-a="invbegin"]');
       if (btn) btn.disabled = !String(this._scan.form.shelf).trim();
+      const photo = this.shadowRoot.querySelector("[data-photobtn]");
+      if (photo) photo.outerHTML = this._photoButton(); // nur für vorhandene Regale
       return;
     }
     if (k === "scan.addName" && this._scan) {
@@ -809,6 +815,7 @@ class BgRegalPanel extends HTMLElement {
       case "invbegin": case "invadd": case "invundo": case "invnext": case "invdone":
         await this._inventoryAction(a.slice(3)); return;
       case "scanassign": await this._assignScanned(); return;
+      case "photoapply": await this._photoApply(); return;
       case "open": return this._openGame(Number(v));
       case "gametab": ui.gameTab = v; break;
       case "linkadd": ui.edit.links.push({ title: "", url: "" }); break;
@@ -981,7 +988,14 @@ class BgRegalPanel extends HTMLElement {
         <div class="form"><label>${t.shelf}<input list="bgr-inv-shelves" value="${esc(s.form.shelf)}" data-k="scan.form.shelf"></label>
         <label>${t.invStartCompartment}<input type="number" min="1" max="50" value="${esc(s.form.compartment)}" data-k="scan.form.compartment"></label></div>
         <datalist id="bgr-inv-shelves">${this._data.shelves.map((x) => `<option value="${esc(x.name)}">`).join("")}</datalist>
-        <div class="row"><button class="primary" data-a="invbegin" ${s.form.shelf.trim() ? "" : "disabled"}>${t.invBegin}</button></div>`;
+        <div class="row"><button class="primary" data-a="invbegin" ${s.form.shelf.trim() ? "" : "disabled"}>${t.invBegin}</button></div>
+        <p class="muted small">${t.photoIntro}</p>
+        <div class="row">${this._photoButton()}</div>`;
+      return;
+    }
+    if (s.mode === "photo") {
+      this._toggleVideo(false);
+      body.innerHTML = this._photoView();
       return;
     }
     if (s.mode === "inventory") {
@@ -1041,6 +1055,130 @@ class BgRegalPanel extends HTMLElement {
       return;
     }
     await this._load(); // zeigt Fach und Liste sofort aktuell
+  }
+
+  // ---- Regal-Scanner per Foto ------------------------------------------------
+  /** Nur für vorhandene Regale: die KI braucht die Zahl der Fächer. */
+  _photoShelf() {
+    const name = (this._scan?.photo?.shelf || this._scan?.form.shelf || "").trim().toLowerCase();
+    return this._data.shelves.find((x) => x.name.toLowerCase() === name);
+  }
+
+  _photoButton() {
+    const ok = !!this._photoShelf();
+    return `<label class="button ${ok ? "" : "disabled"}" data-photobtn>📷 ${this._t.photoScan}<input type="file" accept="image/*" multiple hidden data-photo ${ok ? "" : "disabled"}></label>`;
+  }
+
+  /** Fotos verkleinern (lange Seite 2400 px, JPEG), damit sie schnell hochladen und die KI sie annimmt. */
+  async _shrinkPhoto(file) {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      const scale = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close?.();
+      return await new Promise((ok) => canvas.toBlob((b) => ok(b || file), "image/jpeg", 0.85));
+    } catch (_) {
+      return file; // Format, das der Browser nicht lesen kann: unverändert schicken
+    }
+  }
+
+  async _photoScan(files) {
+    const s = this._scan, shelf = this._photoShelf();
+    if (!s || !shelf || !files.length) return;
+    s.mode = "photo";
+    s.photo = { shelf: shelf.name, busy: true, count: files.length, result: null, error: "" };
+    this._renderScan();
+    const form = new FormData();
+    form.append("shelf", shelf.name);
+    for (const file of files) form.append("file", await this._shrinkPhoto(file), "regal.jpg");
+    let result = null, error = "";
+    try {
+      const res = await this._hass.fetchWithAuth("/api/bgregal/shelf_scan", { method: "POST", body: form });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) result = json;
+      else error = json.message || `${res.status} ${res.statusText}`;
+    } catch (err) {
+      error = err.message || String(err);
+    }
+    if (this._scan !== s) return; // Dialog inzwischen geschlossen
+    // Vorauswahl: sichere Treffer übernehmen, unsichere erst nach Auswahl
+    const picks = (result?.items || []).map((it) => ({
+      on: it.status === "ok" || it.status === "moved",
+      bgg_id: it.status === "unsure" ? "" : it.bgg_id,
+    }));
+    s.photo = { ...s.photo, busy: false, result, error, picks, clear: false };
+    this._renderScan();
+  }
+
+  /** Spiele, die übernommen werden, in Regal-Reihenfolge. */
+  _photoChosen() {
+    const p = this._scan.photo, seen = new Set(), out = [];
+    p.result.items.forEach((it, i) => {
+      const pick = p.picks[i], id = Number(pick.bgg_id);
+      if (pick.on && id && !seen.has(id)) { seen.add(id); out.push({ bgg_id: id, compartment: it.compartment }); }
+    });
+    return out;
+  }
+
+  _photoView() {
+    const t = this._t, p = this._scan.photo;
+    if (p.busy) return `<div class="invhead">${esc(p.shelf)}</div><p class="muted">${t.photoBusy.replace("{n}", p.count)}</p>`;
+    if (!p.result) {
+      return `<div class="invhead">${esc(p.shelf)}</div><p class="warn">${esc(p.error)}</p>
+        <div class="row">${this._photoButton()}</div>`;
+    }
+    const r = p.result, labels = { ok: t.photoOk, moved: t.photoMoved, unsure: t.photoUnsure, unknown: t.photoUnknown };
+    const rows = (comp) => r.items.map((it, i) => ({ it, i })).filter(({ it }) => it.compartment === comp).map(({ it, i }) => {
+      const pick = p.picks[i], tag = `<span class="tag ${it.status}">${labels[it.status]}</span>`;
+      if (it.status === "unknown") return `<li class="muted">${esc(it.title)} ${tag}</li>`;
+      const game = it.status === "unsure"
+        ? `<select data-photosel="${i}"><option value="">${t.photoSkip}</option>${it.candidates.map((c) =>
+            `<option value="${c.bgg_id}" ${String(pick.bgg_id) === String(c.bgg_id) ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
+           <span class="muted small">„${esc(it.title)}“</span>`
+        : `${esc(it.name)}${it.status === "moved" ? ` <span class="muted small">${it.from ? t.photoFrom.replace("{where}", esc(it.from)) : t.photoNoLocation}</span>` : ""}`;
+      return `<li><label><input type="checkbox" data-photopick="${i}" ${pick.on ? "checked" : ""}> ${game}</label> ${tag}</li>`;
+    }).join("");
+    let list = "";
+    for (let c = 1; c <= r.compartments; c++) {
+      const li = rows(c);
+      list += `<h3>${t.compartment} ${c}</h3>${li ? `<ul class="photolist">${li}</ul>` : `<p class="muted small">${t.photoEmpty}</p>`}`;
+    }
+    const chosen = new Set(this._photoChosen().map((g) => g.bgg_id));
+    const missing = this._data.games.filter((g) => g.shelf.toLowerCase() === r.shelf.toLowerCase() && !g.in_box && !chosen.has(g.bgg_id));
+    const miss = missing.length ? `<h3>${t.photoMissing}</h3><p class="small">${esc(missing.map((g) => g.name).join(", "))}</p>
+      <label class="block"><input type="checkbox" data-photoclear ${p.clear ? "checked" : ""}> ${t.photoClear}</label>` : "";
+    return `<div class="invhead">${esc(r.shelf)}</div>
+      ${r.items.length ? "" : `<p class="muted">${t.photoNothing}</p>`}
+      <div class="photoscroll">${list}${miss}</div>
+      <div class="row"><button class="primary" data-a="photoapply" ${chosen.size || (p.clear && missing.length) ? "" : "disabled"}>${t.photoApply.replace("{n}", chosen.size)}</button>
+        ${this._photoButton().replace(t.photoScan, t.photoAgain)}</div>`;
+  }
+
+  _photoInput(e) {
+    const p = this._scan?.photo, d = e.target.dataset;
+    if ("photo" in d) {
+      if (e.type === "change") this._photoScan([...e.target.files]);
+      return;
+    }
+    if (!p?.result || e.type !== "change") return;
+    if ("photopick" in d) p.picks[Number(d.photopick)].on = e.target.checked;
+    else if ("photosel" in d) {
+      const pick = p.picks[Number(d.photosel)];
+      pick.bgg_id = e.target.value;
+      pick.on = !!e.target.value;
+    } else if ("photoclear" in d) p.clear = e.target.checked;
+    this._renderScan();
+  }
+
+  async _photoApply() {
+    const p = this._scan.photo, t = this._t;
+    const res = await this._call("apply_shelf_scan", { shelf: p.result.shelf, games: this._photoChosen(), clear_missing: p.clear }, true);
+    if (!res) return;
+    this._closeScan();
+    this._showToast(t.photoApplied.replace("{n}", res.placed) + (res.cleared.length ? ` · ${t.invCleared.replace("{n}", res.cleared.length)}` : ""));
   }
 
   async _startCamera() {
@@ -1290,6 +1428,14 @@ const CSS = `
   .invhead { font-size: 22px; font-weight: 500; margin: 4px 0 8px; }
   ol.invlist { margin: 0; padding-left: 0; list-style: none; max-height: 30vh; overflow-y: auto; }
   ol.invlist li { padding: 3px 0; border-bottom: 1px solid var(--divider-color); font-size: 14px; }
+  .photoscroll { max-height: 55vh; overflow-y: auto; }
+  .photoscroll h3 { margin: 12px 0 4px; font-size: 15px; }
+  ul.photolist { margin: 0; padding: 0; list-style: none; }
+  ul.photolist li { padding: 4px 0; border-bottom: 1px solid var(--divider-color); font-size: 14px; display: flex;
+                    flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+  ul.photolist select { max-width: 220px; }
+  .tag.moved, .tag.unsure { background: var(--warning-color, #ffa600); color: #000; }
+  .tag.unknown { opacity: .7; }
   .fach { border-bottom: 6px solid var(--wood); padding: 8px 0 4px; margin-bottom: 8px; }
   .fnum { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 6px; }
   .boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }

@@ -8,9 +8,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 import random
 import secrets
+import tempfile
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -24,6 +27,7 @@ from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_AI_TASK,
     CONF_END_SCENE,
     CONF_LOAN_DAYS,
     CONF_LONG_MONTHS,
@@ -44,8 +48,8 @@ from .const import (
     SIGNAL_UPDATE,
     TAG_MAX_AGE_MIN,
 )
+from .core import photo, stats, suggest
 from .core import session as sess
-from .core import stats, suggest
 from .core.bgstats import auto_winners, play_url, qr_svg
 from .core.client import BggClient
 from .core.errors import BggError
@@ -61,6 +65,7 @@ from .core.util import (
     playlist_media_type,
     valid_light_profile,
 )
+from .media_source import DATA_PHOTOS, photo_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -546,6 +551,94 @@ class BgRegal:
         await self.async_refresh()
         return {"cleared": cleared}
 
+    # ---- Regal-Scanner per Foto ------------------------------------------------
+    def _shelf(self, name: str) -> dict[str, Any]:
+        shelf = next((s for s in self.snapshot.get("shelves", []) if s["name"].lower() == name.strip().lower()), None)
+        if shelf is None:
+            raise ServiceValidationError(f"Das Regal „{name}“ gibt es nicht")
+        return shelf
+
+    async def async_scan_shelf_upload(self, shelf: str, photos: list[tuple[bytes, str]]) -> dict[str, Any]:
+        """Fotos aus dem Panel: nur für die Erkennung in temporären Dateien, danach gelöscht."""
+        self._shelf(shelf)
+        if not photos:
+            raise ServiceValidationError("Kein Foto übergeben")
+        files = await self._run(_write_photos, photos)
+        registry = self.hass.data.setdefault(DATA_PHOTOS, {})
+        keys = []
+        for path, mime in files:
+            key = secrets.token_urlsafe(12)
+            registry[key] = (path, mime)
+            keys.append(key)
+        try:
+            return await self.async_scan_shelf_photo(shelf, [photo_id(k) for k in keys])
+        finally:
+            for key in keys:
+                registry.pop(key, None)
+            await self._run(_remove_files, [path for path, _ in files])
+
+    async def async_scan_shelf_photo(self, shelf: str, images: list[str]) -> dict[str, Any]:
+        """Fotos (Medien-IDs) an HA AI Task schicken und die erkannten Spiele abgleichen."""
+        shelf_data = self._shelf(shelf)
+        if "ai_task" not in self.hass.config.components:
+            raise ServiceValidationError("In Home Assistant ist keine KI (AI Task) eingerichtet")
+        from homeassistant.components import ai_task  # erst laden, wenn der Scanner genutzt wird
+
+        games = self.snapshot.get("games", [])
+        names = sorted({g["name"] for g in games if not g["in_box"]}, key=str.lower)
+        try:
+            result = await ai_task.async_generate_data(
+                self.hass,
+                task_name="BGRegal Regal-Scanner",
+                entity_id=self.opt(CONF_AI_TASK) or None,
+                instructions=photo.instructions(shelf_data, names, len(images)),
+                attachments=[{"media_content_id": i} for i in images],
+            )
+        except HomeAssistantError as err:
+            raise HomeAssistantError(f"Die KI konnte das Foto nicht auswerten: {err}") from err
+        try:
+            found = photo.parse_answer(result.data, shelf_data["compartments"])
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        return {
+            "shelf": shelf_data["name"],
+            "compartments": shelf_data["compartments"],
+            **photo.match(found, games, shelf_data["name"]),
+        }
+
+    async def async_apply_shelf_scan(
+        self, shelf: str, games: list[dict[str, Any]], clear_missing: bool
+    ) -> dict[str, Any]:
+        """Bestätigte Spiele ins Regal stellen; Reihenfolge der Liste = Reihenfolge im Fach."""
+        shelf_data = self._shelf(shelf)
+        name, count = shelf_data["name"], shelf_data["compartments"]
+        changes: dict[int, dict[str, Any]] = {}
+        positions: dict[int, int] = {}
+        for entry in games:
+            game = self.find_game(entry["bgg_id"])
+            compartment = entry["compartment"]
+            if not 1 <= compartment <= count:
+                raise ServiceValidationError(f"„{name}“ hat kein Fach {compartment}")
+            if game["bgg_id"] in changes:
+                continue
+            positions[compartment] = positions.get(compartment, -1) + 1
+            changes[game["bgg_id"]] = {"shelf": name, "compartment": compartment, "in_box": None,
+                                       "position": positions[compartment]}
+        cleared = []
+        if clear_missing:
+            for g in self.snapshot.get("games", []):
+                if g["shelf"].lower() == name.lower() and not g["in_box"] and g["bgg_id"] not in changes:
+                    changes[g["bgg_id"]] = {"shelf": "", "compartment": None}
+                    cleared.append(g["name"])
+
+        def write() -> None:
+            for bgg_id, fields in changes.items():
+                self.store.set_game_meta(bgg_id, fields)
+
+        await self._run(write)
+        await self.async_refresh()
+        return {"placed": len(changes) - len(cleared), "cleared": cleared}
+
     # ---- Sitzung -------------------------------------------------------------
     async def _save_session(self, data: dict[str, Any] | None) -> None:
         await self._run(self.store.set_session, data)
@@ -914,3 +1007,18 @@ class BgRegal:
     async def async_dismiss_expansions(self) -> None:
         await self._run(self.store.dismiss_new_expansions)
         await self.async_refresh()
+
+
+def _write_photos(photos: list[tuple[bytes, str]]) -> list[tuple[str, str]]:
+    files = []
+    for content, mime in photos:
+        suffix = mimetypes.guess_extension(mime, strict=False) or ".jpg"
+        with tempfile.NamedTemporaryFile(prefix="bgregal_", suffix=suffix, delete=False) as file:
+            file.write(content)
+        files.append((file.name, mime))
+    return files
+
+
+def _remove_files(paths: list[str]) -> None:
+    for path in paths:
+        Path(path).unlink(missing_ok=True)

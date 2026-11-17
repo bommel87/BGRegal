@@ -30,7 +30,8 @@
           "end_scene": "Szene bei Sitzungsende",
           "loan_reminder_days": "Verleih-Erinnerung nach",
           "long_unplayed_months": "„Lange nicht gespielt“ ab",
-          "notify_service": "Zusätzlich benachrichtigen"
+          "notify_service": "Zusätzlich benachrichtigen",
+          "ai_task_entity": "KI für den Regal-Scanner"
         },
         "data_description": {
           "scan_interval_hours": "Stunden zwischen zwei Abgleichen mit BGG.",
@@ -38,7 +39,8 @@
           "end_scene": "Szene oder Skript, z. B. normales Licht.",
           "loan_reminder_days": "Tage bis zur Erinnerung an ein verliehenes Spiel.",
           "long_unplayed_months": "Monate seit der letzten Partie.",
-          "notify_service": "Optionaler Benachrichtigungsdienst, z. B. dein Handy."
+          "notify_service": "Optionaler Benachrichtigungsdienst, z. B. dein Handy.",
+          "ai_task_entity": "AI-Task-Entität, die Fotos vom Regal auswertet. Leer = die in Home Assistant bevorzugte."
         }
       }
     }
@@ -322,6 +324,38 @@
         "clear_missing": {
           "name": "Nicht gescannte leeren",
           "description": "Spiele, die im aktuellen Fach standen, aber nicht gescannt wurden, bekommen keinen Standort."
+        }
+      }
+    },
+    "scan_shelf_photo": {
+      "name": "Regal per Foto scannen",
+      "description": "Erkennt die Spiele auf Fotos eines ganzen Regals per KI und gleicht sie mit der Sammlung ab. Ändert nichts.",
+      "fields": {
+        "shelf": {
+          "name": "Regal",
+          "description": "Name des Regals."
+        },
+        "images": {
+          "name": "Fotos",
+          "description": "Medien-IDs der Fotos (media-source://…)."
+        }
+      }
+    },
+    "apply_shelf_scan": {
+      "name": "Foto-Scan übernehmen",
+      "description": "Stellt die bestätigten Spiele ins Regal; die Reihenfolge der Liste wird die Reihenfolge im Fach.",
+      "fields": {
+        "shelf": {
+          "name": "Regal",
+          "description": "Name des Regals."
+        },
+        "games": {
+          "name": "Spiele",
+          "description": "Liste aus bgg_id und compartment, je Fach von links nach rechts."
+        },
+        "clear_missing": {
+          "name": "Nicht erkannte leeren",
+          "description": "Spiele, die laut BGRegal im Regal standen, aber nicht in der Liste sind, bekommen keinen Standort."
         }
       }
     },

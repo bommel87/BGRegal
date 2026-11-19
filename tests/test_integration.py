@@ -517,17 +517,21 @@ async def test_shelf_photo(hass: HomeAssistant, regal) -> None:
         seen["bytes"] = media.path.read_bytes()
         seen["path"] = media.path
         seen["instructions"] = kwargs["instructions"]
-        return type("Result", (), {"data": '{"compartments": [{"compartment": 2, "games": ['
-                                           '{"title": "Catan", "confidence": 0.9}, {"title": "Azul"}]}]}'})()
+        seen["entity_id"] = kwargs["entity_id"]
+        return type("Result", (), {"data": '{"2":["Catan","Azul"]}'})()
 
     with pytest.raises(ServiceValidationError):  # ohne KI geht es nicht
         await regal.async_scan_shelf_upload("Billy", [(b"jpg", "image/jpeg")])
     hass.config.components.add("ai_task")
-    # Ersatz für HA AI Task (braucht im echten HA die Conversation-Integration)
     fake_ai_task = SimpleNamespace(async_generate_data=fake_generate)
+    with (patch.dict(sys.modules, {"homeassistant.components.ai_task": fake_ai_task}),
+          pytest.raises(ServiceValidationError, match="keine AI-Task-Entität")):
+        await regal.async_scan_shelf_upload("Billy", [(b"jpg", "image/jpeg")])
+    hass.states.async_set("ai_task.claude", "unknown")  # einzige Entität -> wird ohne Option genommen
     with patch.dict(sys.modules, {"homeassistant.components.ai_task": fake_ai_task}):
         result = await regal.async_scan_shelf_upload("billy", [(b"jpg", "image/jpeg")])
     assert seen["bytes"] == b"jpg" and not seen["path"].exists()  # danach verworfen
+    assert seen["entity_id"] == "ai_task.claude"
     assert hass.data[DATA_PHOTOS] == {}
     assert "„Billy“ hat 2 Fächer" in seen["instructions"]
     assert [(i["title"], i["status"]) for i in result["items"]] == [("Catan", "moved"), ("Azul", "unknown")]

@@ -577,6 +577,18 @@ class BgRegal:
                 registry.pop(key, None)
             await self._run(_remove_files, [path for path, _ in files])
 
+    def _ai_task_entity(self) -> str | None:
+        """Gewählte AI-Task-Entität; ohne Wahl die einzige vorhandene, sonst die in HA bevorzugte (None)."""
+        if chosen := self.opt(CONF_AI_TASK):
+            return chosen
+        available = self.hass.states.async_entity_ids("ai_task")
+        if not available:
+            raise ServiceValidationError(
+                "Es gibt keine AI-Task-Entität. In der Anthropic-Integration (oder einer anderen KI) "
+                "über „AI Task hinzufügen“ eine anlegen."
+            )
+        return available[0] if len(available) == 1 else None
+
     async def async_scan_shelf_photo(self, shelf: str, images: list[str]) -> dict[str, Any]:
         """Fotos (Medien-IDs) an HA AI Task schicken und die erkannten Spiele abgleichen."""
         shelf_data = self._shelf(shelf)
@@ -586,16 +598,24 @@ class BgRegal:
 
         games = self.snapshot.get("games", [])
         names = sorted({g["name"] for g in games if not g["in_box"]}, key=str.lower)
+        entity_id = self._ai_task_entity()
         try:
             result = await ai_task.async_generate_data(
                 self.hass,
                 task_name="BGRegal Regal-Scanner",
-                entity_id=self.opt(CONF_AI_TASK) or None,
+                entity_id=entity_id,
                 instructions=photo.instructions(shelf_data, names, len(images)),
                 attachments=[{"media_content_id": i} for i in images],
             )
         except HomeAssistantError as err:
-            raise HomeAssistantError(f"Die KI konnte das Foto nicht auswerten: {err}") from err
+            hint = ""
+            if "token" in str(err).lower():
+                hint = (" – Tipp: In der Anthropic-Integration beim Eintrag „AI Task“ unter Konfigurieren "
+                        "die maximale Tokenzahl erhöhen (z. B. 8000).")
+            elif "no preferred entity" in str(err).lower():
+                hint = (" – Tipp: In den Optionen von BGRegal unter „KI für den Regal-Scanner“ eine "
+                        "AI-Task-Entität wählen.")
+            raise HomeAssistantError(f"Die KI konnte das Foto nicht auswerten: {err}{hint}") from err
         try:
             found = photo.parse_answer(result.data, shelf_data["compartments"])
         except ValueError as err:

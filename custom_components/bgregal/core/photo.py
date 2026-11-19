@@ -18,6 +18,7 @@ UNKNOWN = "unknown"  # nicht in der Sammlung
 MATCH_SURE = 0.88  # Namensähnlichkeit für einen sicheren Treffer
 MATCH_MIN = 0.6  # darunter gilt der Titel als „nicht in der Sammlung“
 CONFIDENCE_SURE = 0.6  # unsicherere Erkennungen der KI kommen immer zur Auswahl
+UNSURE_CONFIDENCE = 0.4  # Titel mit „?“ in der kompakten Antwort
 CANDIDATES = 3
 
 
@@ -39,10 +40,11 @@ def instructions(shelf: dict[str, Any], names: list[str], photos: int) -> str:
         "Die Fachböden erkennst du an den waagerechten Brettern.\n"
         "Nenne die Spiele je Fach von links nach rechts, so wie sie stehen oder liegen. "
         "Nutze den Namen aus der Sammlung unten, wenn das Spiel darin vorkommt, sonst den Titel "
-        "auf dem Karton. Gib je Spiel an, wie sicher du dir bist (0 bis 1). "
+        "auf dem Karton. Hänge ein ? an den Titel, wenn du dir nicht sicher bist. "
         "Lass Kartons weg, deren Titel du nicht lesen kannst.\n"
-        'Antworte nur mit JSON in dieser Form: {"compartments": [{"compartment": 1, '
-        '"games": [{"title": "Catan", "confidence": 0.95}]}]}\n\n'
+        # Knapp halten: die Ausgabe der KI ist begrenzt (Anthropic: standardmäßig 3000 Tokens)
+        "Antworte sofort und nur mit kompaktem JSON ohne Leerzeichen und ohne Erklärung, "
+        'Schlüssel = Fachnummer: {"1":["Catan","Azul?"],"2":[]}\n\n'
         "Sammlung:\n" + "\n".join(names)
     )
 
@@ -50,6 +52,8 @@ def instructions(shelf: dict[str, Any], names: list[str], photos: int) -> str:
 def parse_answer(data: Any, compartments: int) -> list[dict[str, Any]]:
     """Antwort der KI (dict oder Text mit JSON) -> Liste aus Fach, Titel, Sicherheit.
 
+    Kompakt: {"1": ["Catan", "Azul?"]} (? = unsicher); die ausführliche Form
+    {"compartments": [{"compartment": 1, "games": [{"title", "confidence"}]}]} geht auch.
     Fächer außerhalb des Regals und leere Titel fallen weg, die Reihenfolge bleibt erhalten."""
     if isinstance(data, str):
         text = data.strip()
@@ -63,6 +67,10 @@ def parse_answer(data: Any, compartments: int) -> list[dict[str, Any]]:
             data = json.loads(text[start:end + 1])
         except json.JSONDecodeError as err:
             raise ValueError(f"Die Antwort der KI ist kein gültiges JSON: {err}") from err
+    if isinstance(data, dict) and "compartments" not in data:
+        if data and not any(str(k).strip().isdigit() for k in data):
+            raise ValueError("Die Antwort der KI enthält keine Fächer")
+        data = {"compartments": [{"compartment": k, "games": v} for k, v in data.items()]}
     if not isinstance(data, dict) or not isinstance(data.get("compartments"), list):
         raise ValueError("Die Antwort der KI enthält keine Fächer")
     found = []
@@ -75,9 +83,11 @@ def parse_answer(data: Any, compartments: int) -> list[dict[str, Any]]:
             continue
         if not 1 <= number <= compartments:
             continue
-        for game in comp.get("games") or []:
+        games = comp.get("games")
+        for game in games if isinstance(games, list) else []:
             if isinstance(game, str):
-                game = {"title": game}
+                unsure = game.rstrip().endswith("?")
+                game = {"title": game.rstrip().rstrip("?"), "confidence": UNSURE_CONFIDENCE if unsure else 1}
             title = str((game or {}).get("title") or "").strip() if isinstance(game, dict) else ""
             if not title:
                 continue

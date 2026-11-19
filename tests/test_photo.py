@@ -31,6 +31,15 @@ def test_parse_answer_text_with_fence():
     ]
 
 
+def test_parse_answer_compact():
+    raw = '{"2":["Catan","Azul?"],"1":["Pandemic"],"7":["zu tief"],"x":["kein Fach"]}'
+    assert parse_answer(raw, 3) == [
+        {"compartment": 1, "title": "Pandemic", "confidence": 1.0},
+        {"compartment": 2, "title": "Catan", "confidence": 1.0},
+        {"compartment": 2, "title": "Azul", "confidence": 0.4},
+    ]
+
+
 @pytest.mark.parametrize("raw", ["kein json", "[1, 2]", '{"games": []}', "{kaputt}"])
 def test_parse_answer_rejects(raw):
     with pytest.raises(ValueError):

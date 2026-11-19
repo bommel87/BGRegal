@@ -3,7 +3,7 @@
  *   type: custom:bgregal-card
  *   bgg_id: 13        # optional; ohne: Spiel der Sitzung, sonst der aktuelle Vorschlag
  */
-import { STRINGS, esc, fmtDate, location, playersText } from "./bgregal-common.js?v=0.8.1";
+import { STRINGS, esc, fmtDate, location, playersText } from "./bgregal-common.js?v=0.8.2";
 
 class BgRegalCard extends HTMLElement {
   setConfig(config) {

@@ -38,10 +38,11 @@ def instructions(shelf: dict[str, Any], names: list[str], photos: int) -> str:
         f"Das Regal „{shelf['name']}“ hat {count} Fächer, übereinander angeordnet. "
         f"Fach 1 ist das {first} Fach, die Nummern zählen von dort aus weiter. "
         "Die Fachböden erkennst du an den waagerechten Brettern.\n"
-        "Nenne die Spiele je Fach von links nach rechts, so wie sie stehen oder liegen. "
-        "Nutze den Namen aus der Sammlung unten, wenn das Spiel darin vorkommt, sonst den Titel "
-        "auf dem Karton. Hänge ein ? an den Titel, wenn du dir nicht sicher bist. "
-        "Lass Kartons weg, deren Titel du nicht lesen kannst.\n"
+        "Nenne je Fach von links nach rechts jeden einzelnen Karton, ob stehend oder liegend – "
+        "auch schmale, gedrehte oder teilweise verdeckte. Zähle die Kartonrücken, bevor du antwortest, "
+        "damit keiner fehlt. Nutze den Namen aus der Sammlung unten, wenn das Spiel darin vorkommt "
+        "(Farbe, Logo und Schriftbild helfen auch bei kleiner Schrift), sonst den Titel auf dem Karton. "
+        "Kannst du einen Titel nicht sicher lesen, nenne trotzdem deine beste Vermutung mit ? am Ende.\n"
         # Knapp halten: die Ausgabe der KI ist begrenzt (Anthropic: standardmäßig 3000 Tokens)
         "Antworte sofort und nur mit kompaktem JSON ohne Leerzeichen und ohne Erklärung, "
         'Schlüssel = Fachnummer: {"1":["Catan","Azul?"],"2":[]}\n\n'

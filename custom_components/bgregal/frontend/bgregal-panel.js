@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.8.1";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.8.2";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -1069,11 +1069,11 @@ class BgRegalPanel extends HTMLElement {
     return `<label class="button ${ok ? "" : "disabled"}" data-photobtn>📷 ${this._t.photoScan}<input type="file" accept="image/*" multiple hidden data-photo ${ok ? "" : "disabled"}></label>`;
   }
 
-  /** Fotos verkleinern (lange Seite 2400 px, JPEG), damit sie schnell hochladen und die KI sie annimmt. */
+  /** Fotos verkleinern (lange Seite 2576 px = Höchstauflösung der aktuellen Claude-Modelle, JPEG), damit sie schnell hochladen und die KI sie annimmt. */
   async _shrinkPhoto(file) {
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-      const scale = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height));
+      const scale = Math.min(1, 2576 / Math.max(bitmap.width, bitmap.height));
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(bitmap.width * scale);
       canvas.height = Math.round(bitmap.height * scale);

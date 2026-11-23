@@ -317,7 +317,7 @@ class BgRegal:
     # ---- Zuordnungen ---------------------------------------------------------
     async def async_set_game(self, game: dict[str, Any], fields: dict[str, Any]) -> None:
         clean: dict[str, Any] = {}
-        for key in ("shelf", "nfc_tag", "manual_url", "light_profile"):
+        for key in ("shelf", "nfc_tag", "manual_url", "setup_url", "light_profile"):
             if key in fields:
                 clean[key] = (fields[key] or "").strip()
         if "compartment" in fields:

@@ -197,6 +197,10 @@
           "name": "Anleitung",
           "description": "Link zur Spielanleitung."
         },
+        "setup_url": {
+          "name": "Aufbau",
+          "description": "Link zur Aufbau-Anleitung (Webseite oder PDF)."
+        },
         "links": {
           "name": "Links",
           "description": "Weitere Links wie Errata, FAQ oder Almanach: Liste aus title und url. Assist liest sie bei Regelfragen mit."

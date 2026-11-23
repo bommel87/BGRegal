@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.10.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.11.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -440,6 +440,7 @@ class BgRegalPanel extends HTMLElement {
       ...rulebooks.map((n) => `<button data-a="rbopen" data-v="${g.bgg_id}|${esc(n)}">📄 ${esc(n.slice(0, -4))}</button>`),
       ...g.links.map((l) => `<a class="button" href="${esc(l.url)}" target="_blank" rel="noreferrer">🔗 ${esc(l.title)}</a>`),
       ...(g.manual_url ? [`<a class="button" href="${esc(g.manual_url)}" target="_blank" rel="noreferrer">🔗 ${t.manual}</a>`] : []),
+      ...(g.setup_url ? [`<a class="button" href="${esc(g.setup_url)}" target="_blank" rel="noreferrer">🧩 ${t.setup}</a>`] : []),
     ];
     const overview = `
       <section class="gsec"><h3>${t.whereSection}</h3>
@@ -488,7 +489,8 @@ class BgRegalPanel extends HTMLElement {
         <div class="row"><label class="button ${ui.rbUploading ? "disabled" : ""}">${ui.rbUploading ? t.uploading : t.uploadPdf}<input type="file" accept="application/pdf,.pdf" multiple hidden data-upload="${g.bgg_id}" ${ui.rbUploading ? "disabled" : ""}></label></div>
         <p class="muted small">${t.rulebooksHint}</p>
         <h4>${t.linksTitle}</h4>
-        <div class="form"><label>${t.manual}<input type="url" placeholder="https://…" value="${esc(e.manual_url)}" data-k="edit.manual_url"></label></div>
+        <div class="form"><label>${t.manual}<input type="url" placeholder="https://…" value="${esc(e.manual_url)}" data-k="edit.manual_url"></label>
+          <label>${t.setupLink}<input type="url" placeholder="https://…" value="${esc(e.setup_url)}" data-k="edit.setup_url"></label></div>
         ${e.links.map((l, i) => `<div class="row">
           <input placeholder="${t.linkTitle}" value="${esc(l.title)}" data-k="link.${i}.title">
           <input type="url" placeholder="https://…" value="${esc(l.url)}" data-k="link.${i}.url">
@@ -563,6 +565,7 @@ class BgRegalPanel extends HTMLElement {
           : `<button class="link" data-a="orderedit">${order.length ? t.changeOrder : t.setOrder}</button>`}
         <div class="row center">
           ${g.manual_url ? `<a class="button" href="${esc(g.manual_url)}" target="_blank" rel="noreferrer">${t.manual}</a>` : ""}
+          ${g.setup_url ? `<a class="button" href="${esc(g.setup_url)}" target="_blank" rel="noreferrer">🧩 ${t.setup}</a>` : ""}
           ${this._rulebooks(s.bgg_id).map((n) => `<button data-a="rbopen" data-v="${s.bgg_id}|${esc(n)}">${esc(n.slice(0, -4))}</button>`).join("")}
           ${(g.links || []).map((l) => `<a class="button" href="${esc(l.url)}" target="_blank" rel="noreferrer">${esc(l.title)}</a>`).join("")}
           <button class="primary" data-a="end">${t.endSession}</button>
@@ -912,7 +915,7 @@ class BgRegalPanel extends HTMLElement {
         const ok = await this._call("set_game", {
           bgg_id: Number(v), shelf: ed.shelf, compartment: ed.compartment === "" ? 0 : Number(ed.compartment),
           nfc_tag: ed.nfc_tag, light_profile: ed.light_profile, playlist: ed.playlist,
-          manual_url: ed.manual_url, ean: ed.ean,
+          manual_url: ed.manual_url, setup_url: ed.setup_url, ean: ed.ean,
           links: ed.links.filter((l) => l.url.trim()).map((l) => ({ title: l.title.trim(), url: l.url.trim() })),
           ...(this._games.get(Number(v))?.expansion ? { in_box: ed.in_box ? Number(ed.in_box) : 0 } : {}),
         });
@@ -1393,7 +1396,7 @@ class BgRegalPanel extends HTMLElement {
     this._ui.lendTo = "";
     this._ui.edit = {
       shelf: g.shelf, compartment: g.compartment ?? "", in_box: g.in_box || "", nfc_tag: g.nfc_tag,
-      light_profile: g.light_profile, playlist: g.playlist, manual_url: g.manual_url, ean: g.ean,
+      light_profile: g.light_profile, playlist: g.playlist, manual_url: g.manual_url, setup_url: g.setup_url || "", ean: g.ean,
       links: g.links.map((l) => ({ ...l })),
     };
     this._render();

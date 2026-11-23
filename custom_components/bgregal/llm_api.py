@@ -91,7 +91,9 @@ class GetGameRulesTool(llm.Tool):
                 text = f"(nicht lesbar: {err})"
             rulebooks.append({"file": entry["name"], "text": text or "(kein Text, vermutlich ein Scan)"})
         links = []
-        for link in game.get("links", []):
+        # Der Aufbau-Link zählt wie ein weiterer Link, damit Assist Aufbaufragen beantworten kann
+        setup = [{"title": "Aufbau", "url": game["setup_url"]}] if game.get("setup_url") else []
+        for link in [*game.get("links", []), *setup]:
             try:
                 text = await _link_text(hass, regal, game["bgg_id"], link["url"])
                 links.append({**link, "text": text or "(kein Text gefunden)"})
@@ -113,7 +115,7 @@ class ListRulebooksTool(llm.Tool):
         regal = get_regal(hass)
         index = await hass.async_add_executor_job(regal.rules.index)
         games = regal.snapshot.get("games", [])
-        return _result({"games": sorted(g["name"] for g in games if g["bgg_id"] in index or g.get("links"))})
+        return _result({"games": sorted(g["name"] for g in games if g["bgg_id"] in index or g.get("links") or g.get("setup_url"))})
 
 
 class RulesAPI(llm.API):

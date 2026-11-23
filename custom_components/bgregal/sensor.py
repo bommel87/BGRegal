@@ -99,6 +99,7 @@ def _session_attrs(regal) -> dict[str, Any]:
         "order": current.get("order", []),
         "location": _location(game),
         "manual_url": (game or {}).get("manual_url", ""),
+        "setup_url": (game or {}).get("setup_url", ""),
         "thumbnail": (game or {}).get("thumbnail"),
         "completed": bool(current.get("result")),
     }
@@ -235,7 +236,7 @@ class ShelfSensor(CoordinatorEntity, SensorEntity):
 
 class BgRegalSensor(BgRegalEntity, SensorEntity):
     _unrecorded_attributes = frozenset(
-        {"pile_of_shame_games", "loans", "expansions", "order", "thumbnail", "manual_url"}
+        {"pile_of_shame_games", "loans", "expansions", "order", "thumbnail", "manual_url", "setup_url"}
     )
 
     def __init__(self, coordinator, spec: Spec) -> None:

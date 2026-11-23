@@ -183,7 +183,7 @@ Alle Dienste liegen unter `bgregal.*`; ein Spiel gibst du mit `bgg_id` oder `nam
 | Dienst | Zweck |
 | --- | --- |
 | `sync_now` | sofort synchronisieren |
-| `set_game` | `shelf`, `compartment`, `in_box` (BGG-ID des Kartons, leer = eigener Platz), `in_base` (Kurzform fürs Basisspiel), `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`, `links` (Liste aus `title` und `url`); leer = löschen |
+| `set_game` | `shelf`, `compartment`, `in_box` (BGG-ID des Kartons, leer = eigener Platz), `in_base` (Kurzform fürs Basisspiel), `nfc_tag`, `ean`, `light_profile`, `playlist`, `manual_url`, `setup_url` (Aufbau), `links` (Liste aus `title` und `url`); leer = löschen |
 | `scan_code` | gescannter Barcode oder Tag: Sitzung starten/beenden, sonst `unknown` |
 | `set_shelf` / `remove_shelf` | Regal: `area_id`, `compartments`, `compartment_1_bottom`, `game_sort`, `new_name` |
 | `set_sort_order` | Reihenfolge: `kind` (`rooms`/`shelves`/`games`) und `order` |

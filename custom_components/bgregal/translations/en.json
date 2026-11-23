@@ -197,6 +197,10 @@
           "name": "Manual",
           "description": "Link to the rules."
         },
+        "setup_url": {
+          "name": "Setup",
+          "description": "Link to a setup guide (web page or PDF)."
+        },
         "links": {
           "name": "Links",
           "description": "Further links such as errata, FAQ or almanac: list of title and url. Assist reads them for rules questions."

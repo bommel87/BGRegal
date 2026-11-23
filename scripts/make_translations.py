@@ -39,6 +39,7 @@ SERVICES = {
         "light_profile": ("Light profile", "Scene or script for the game.", "Lichtprofil", "Szene oder Skript für das Spiel."),
         "playlist": ("Sound profile", "Spotify playlist link or URI.", "Soundprofil", "Spotify-Playlist als Link oder URI."),
         "manual_url": ("Manual", "Link to the rules.", "Anleitung", "Link zur Spielanleitung."),
+        "setup_url": ("Setup", "Link to a setup guide (web page or PDF).", "Aufbau", "Link zur Aufbau-Anleitung (Webseite oder PDF)."),
         "links": ("Links", "Further links such as errata, FAQ or almanac: list of title and url. Assist reads them for rules questions.",
                   "Links", "Weitere Links wie Errata, FAQ oder Almanach: Liste aus title und url. Assist liest sie bei Regelfragen mit."),
         "ean": ("EAN", "Barcode on the box (8, 12, 13 or 14 digits).", "EAN", "Barcode auf der Schachtel (8, 12, 13 oder 14 Ziffern)."),

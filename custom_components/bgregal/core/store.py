@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS game_meta (
     light_profile TEXT NOT NULL DEFAULT '',
     playlist TEXT NOT NULL DEFAULT '',
     manual_url TEXT NOT NULL DEFAULT '',
+    setup_url TEXT NOT NULL DEFAULT '',
     ean TEXT NOT NULL DEFAULT '',
     links TEXT NOT NULL DEFAULT '[]',
     in_box INTEGER  -- BGG-ID des Kartons, in dem die Erweiterung liegt
@@ -165,9 +166,10 @@ COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("shelves", "game_sort", "TEXT NOT NULL DEFAULT 'name'"),
     ("players", "aliases", "TEXT NOT NULL DEFAULT '[]'"),  # weitere Namen derselben Person
     ("players", "person", "TEXT NOT NULL DEFAULT ''"),  # person.* in Home Assistant
+    ("game_meta", "setup_url", "TEXT NOT NULL DEFAULT ''"),  # Aufbau-Link
 )
 
-META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean", "position", "links", "in_box")
+META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "setup_url", "ean", "position", "links", "in_box")
 GAME_SORTS = ("name", "plays", "last_play", "manual")
 
 
@@ -377,7 +379,7 @@ class Store:
     def games(self) -> list[dict[str, Any]]:
         rows = self._rows(
             """SELECT g.*, m.shelf, m.compartment, m.in_base, m.nfc_tag, m.light_profile,
-                      m.playlist, m.manual_url, m.ean, m.position, m.links, m.in_box,
+                      m.playlist, m.manual_url, m.setup_url, m.ean, m.position, m.links, m.in_box,
                       COALESCE(s.plays, 0) AS plays, s.last_play
                FROM games g
                LEFT JOIN game_meta m ON m.bgg_id = g.bgg_id
@@ -402,7 +404,7 @@ class Store:
                 g[key] = json.loads(g[key] or "[]")
             g.pop("color_src", None)  # Spalten aus 0.2.0, werden nicht mehr genutzt
             g.pop("color", None)
-            for key in ("shelf", "nfc_tag", "light_profile", "playlist", "manual_url", "ean"):
+            for key in ("shelf", "nfc_tag", "light_profile", "playlist", "manual_url", "setup_url", "ean"):
                 g[key] = g[key] or ""
             g["links"] = json.loads(g["links"] or "[]")
             g["expansion"] = g["subtype"] == EXPANSION

@@ -580,3 +580,13 @@ async def test_shelf_photo(hass: HomeAssistant, regal) -> None:
             DOMAIN, "apply_shelf_scan", {"shelf": "Billy", "games": [{"bgg_id": 13, "compartment": 5}]},
             blocking=True, return_response=True,
         )
+
+
+async def test_setup_url(hass: HomeAssistant, regal) -> None:
+    url = "https://boardgamegeek.com/filepage/1/aufbau"
+    await hass.services.async_call(DOMAIN, "set_game", {"bgg_id": 13, "setup_url": f" {url} "}, blocking=True)
+    assert regal.find_game(13)["setup_url"] == url
+    await hass.services.async_call(DOMAIN, "start_session", {"bgg_id": 13}, blocking=True)
+    assert hass.states.get("sensor.bgregal_sitzung").attributes["setup_url"] == url
+    await hass.services.async_call(DOMAIN, "set_game", {"bgg_id": 13, "setup_url": ""}, blocking=True)
+    assert regal.find_game(13)["setup_url"] == ""

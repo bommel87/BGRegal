@@ -56,7 +56,11 @@ Regal: Sie hat den Standort des Kartons und zieht mit um. Die Kachel des Kartons
 Spiel-Fenster listet sie, und die Suche nach der Erweiterung hebt den Karton hervor. Ein Karton, der selbst in einem
 Karton liegt, nimmt nichts auf.
 
-Die Regale stehen nach Raum gruppiert untereinander. Unter **Regal einstellen** legst du fest:
+Die Regale stehen nach Raum gruppiert untereinander. **+ Neues Regal** und **Inventur** stehen oben in der Leiste.
+Ein Klick auf den Regalnamen klappt das Regal ein oder aus, **Alle einklappen** schließt alle auf einmal. Das merkt
+sich der Browser je Gerät; trifft die Suche ein Spiel in einem eingeklappten Regal, klappt es für die Anzeige auf.
+
+Unter **Regal einstellen** legst du fest:
 
 - **Raum:** ein Bereich aus Home Assistant. Jedes Regal ist ein eigenes Gerät in diesem Raum, mit einem Sensor für die
   Zahl der Spiele. Änderst du den Raum am Gerät in Home Assistant, übernimmt BGRegal ihn.

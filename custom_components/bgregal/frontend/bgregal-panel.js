@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.8.2";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.9.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -21,6 +21,7 @@ class BgRegalPanel extends HTMLElement {
       order: null,
     };
     this._toast = "";
+    this._collapsed = this._loadCollapsed(); // eingeklappte Regale (Namen in Kleinbuchstaben)
   }
 
   set hass(hass) {
@@ -280,6 +281,9 @@ class BgRegalPanel extends HTMLElement {
         <input type="search" placeholder="${t.search}" value="${esc(ui.search)}" data-k="search">
         <div class="chips">${filters}</div>
         <button class="chip ${ui.sorting ? "on" : ""}" data-a="sorttoggle">⇅ ${ui.sorting ? t.sortDone : t.sortMode}</button>
+        ${this._data.shelves.length ? `<button class="chip" data-a="collapseall">${this._allCollapsed() ? `▾ ${t.expandAll}` : `▸ ${t.collapseAll}`}</button>` : ""}
+        <button class="chip" data-a="newshelf">+ ${t.newShelf}</button>
+        <button class="chip ${this._data.inventory ? "on" : ""}" data-a="inventory">${BARCODE_ICON} ${this._data.inventory ? t.invContinue : t.inventory}</button>
         ${hits ? `<span class="hitcount ${hits.size ? "" : "none"}">${hits.size ? `${hits.size} ${hits.size === 1 ? t.hit : t.hitsWord}` : t.noMatch}</span>` : ""}
       </div>`;
     if (!this._data.games.length) return toolbar + `<div class="empty">${t.noGames}</div>`;
@@ -301,6 +305,13 @@ class BgRegalPanel extends HTMLElement {
     }
     const shelfHtml = (shelf) => {
       const inShelf = games.filter((g) => g.shelf.toLowerCase() === shelf.name.toLowerCase());
+      // Eingeklappt, außer Suche oder Filter treffen ein Spiel darin
+      const open = !this._collapsed.has(shelf.name.toLowerCase()) || !!(hits && inShelf.some((g) => hits.has(g.bgg_id)));
+      const toggle = `<button class="shtoggle" data-a="shelftoggle" data-v="${esc(shelf.name)}" aria-expanded="${open}">
+        <span class="caret">${open ? "▾" : "▸"}</span><h2>${esc(shelf.name)}</h2></button>`;
+      if (!open) {
+        return `<section class="billy closed"><div class="shead">${toggle}<span class="muted small">${t.shelfCount.replace("{n}", inShelf.length)}</span>${arrows("shelf", shelf.name)}</div></section>`;
+      }
       const tile = tileFor(shelf);
       const rows = [];
       const numbers = Array.from({ length: shelf.compartments }, (_, i) => i + 1);
@@ -312,15 +323,44 @@ class BgRegalPanel extends HTMLElement {
       const loose = this._sortGames(inShelf.filter((g) => !g.compartment), shelf);
       if (loose.length) rows.push(`<div class="fach"><div class="fnum">${t.noCompartment}</div><div class="boxes">${loose.map(tile).join("")}</div></div>`);
       const hint = sorting && shelf.game_sort !== "manual" ? `<span class="muted small">${t.manualHint}</span>` : "";
-      return `<section class="billy"><div class="shead"><h2>${esc(shelf.name)}</h2>${arrows("shelf", shelf.name)}
+      return `<section class="billy"><div class="shead">${toggle}${arrows("shelf", shelf.name)}
         <button class="link" data-a="editshelf" data-v="${esc(shelf.name)}">${t.shelfSettings}</button>${hint}</div>${rows.join("")}</section>`;
     };
     const unplaced = this._sortGames(games.filter((g) => !g.shelf));
     return toolbar
       + this._roomOrder().map((key) => `<section class="room"><h2 class="roomname">${esc(this._areaName(key) || t.noRoom)}${arrows("room", key)}</h2>${rooms.get(key).map(shelfHtml).join("")}</section>`).join("")
-      + (unplaced.length ? `<section class="billy loose"><h2>${t.noLocation}</h2><div class="boxes">${unplaced.map(tileFor(null)).join("")}</div></section>` : "")
-      + `<div class="row"><button data-a="newshelf">+ ${t.newShelf}</button>
-          <button data-a="inventory">${BARCODE_ICON} ${this._data.inventory ? t.invContinue : t.inventory}</button></div>`;
+      + (unplaced.length ? `<section class="billy loose"><h2>${t.noLocation}</h2><div class="boxes">${unplaced.map(tileFor(null)).join("")}</div></section>` : "");
+  }
+
+  // ---- Regale einklappen (je Gerät im Browser gemerkt) ------------------------
+  _loadCollapsed() {
+    try {
+      return new Set(JSON.parse(localStorage.getItem("bgregal.collapsed") || "[]"));
+    } catch (_) {
+      return new Set(); // privates Fenster o. Ä.: dann eben ohne Merken
+    }
+  }
+
+  _saveCollapsed() {
+    try {
+      localStorage.setItem("bgregal.collapsed", JSON.stringify([...this._collapsed]));
+    } catch (_) { /* nicht speicherbar: gilt nur bis zum Neuladen */ }
+  }
+
+  _allCollapsed() {
+    return this._data.shelves.every((s) => this._collapsed.has(s.name.toLowerCase()));
+  }
+
+  _toggleShelf(name) {
+    const key = name.toLowerCase();
+    if (this._collapsed.has(key)) this._collapsed.delete(key);
+    else this._collapsed.add(key);
+    this._saveCollapsed();
+  }
+
+  _toggleAllShelves() {
+    this._collapsed = this._allCollapsed() ? new Set() : new Set(this._data.shelves.map((s) => s.name.toLowerCase()));
+    this._saveCollapsed();
   }
 
   /** Ersten Treffer sichtbar machen, ohne das Suchfeld zu verlassen. */
@@ -784,6 +824,8 @@ class BgRegalPanel extends HTMLElement {
       case "sync": if (await this._call("sync_now")) this._showToast(t.syncStarted); return;
       case "filter": ui.filter = v; this._render(); this._scrollToHit(); return;
       case "sorttoggle": ui.sorting = !ui.sorting; break;
+      case "shelftoggle": this._toggleShelf(v); break;
+      case "collapseall": this._toggleAllShelves(); break;
       case "move": { const [kind, id, step] = v.split("|"); await this._move(kind, id, Number(step)); return; }
       case "newshelf": ui.shelfEdit = { original: "", name: "", area_id: "", compartments: 6, reversed: false, game_sort: "name" }; break;
       case "editshelf": {
@@ -1406,6 +1448,10 @@ const CSS = `
                 color: var(--secondary-text-color); margin: 24px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--divider-color); }
   .shead { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
   .shead h2 { margin: 0 0 8px; }
+  .shtoggle { display: flex; align-items: baseline; gap: 6px; border: 0; background: none; padding: 0; color: inherit; cursor: pointer; text-align: left; }
+  .shtoggle .caret { font-size: 14px; color: var(--secondary-text-color); width: 14px; }
+  section.billy.closed .shead h2 { margin-bottom: 0; }
+  .toolbar .chip svg { width: 16px; height: 16px; vertical-align: -3px; }
   .tile.hit { outline: 3px solid var(--accent-color, #ff9800); outline-offset: 1px;
               background: color-mix(in srgb, var(--accent-color, #ff9800) 14%, var(--card-background-color)); }
   .tile.dim, .tile.dim.lent { opacity: .3; }

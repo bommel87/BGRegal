@@ -179,6 +179,34 @@ async def test_loans_and_players(hass: HomeAssistant, regal) -> None:
     assert anna["hidden"] and anna["dislikes"] == ["cooperative"]  # Vorlieben bleiben erhalten
 
 
+async def test_player_links(hass: HomeAssistant, regal) -> None:
+    call = lambda data: hass.services.async_call(DOMAIN, "set_player", data, blocking=True)  # noqa: E731
+    hass.states.async_set("person.ben", "home")
+    await call({"name": "Ben", "aliases": ["Anna"], "person": "person.ben"})
+    ben = next(p for p in regal.snapshot["players"] if p["name"] == "Ben")
+    assert ben["plays"] == 1 and ben["aliases"] == ["Anna"]
+    assert regal.home_players() == ["Ben"] and regal.public_state()["home_players"] == ["Ben"]
+
+    # Nur „zu Hause“ zählt, andere Zonen nicht; das Panel bekommt ein Update
+    updates = []
+    from homeassistant.helpers.dispatcher import async_dispatcher_connect
+
+    from custom_components.bgregal.const import SIGNAL_UPDATE
+    async_dispatcher_connect(hass, SIGNAL_UPDATE, lambda: updates.append(1))
+    hass.states.async_set("person.ben", "Garten")
+    await hass.async_block_till_done()
+    assert regal.home_players() == [] and updates
+
+    with pytest.raises(ServiceValidationError):  # zugeordnete Namen bearbeitet man beim Hauptnamen
+        await call({"name": "Anna", "dislikes": ["party"]})
+    with pytest.raises(ServiceValidationError):  # sich selbst zuordnen geht nicht
+        await call({"name": "Ben", "aliases": ["Ben"]})
+    with pytest.raises(ServiceValidationError):  # Person muss es geben
+        await call({"name": "Ben", "person": "person.niemand"})
+    await call({"name": "Ben", "aliases": [], "person": ""})
+    assert {p["name"] for p in regal.snapshot["players"]} >= {"Anna", "Ben"}
+
+
 async def test_websocket_data(hass: HomeAssistant, regal, hass_ws_client) -> None:
     client = await hass_ws_client(hass)
     await client.send_json({"id": 1, "type": "bgregal/data"})

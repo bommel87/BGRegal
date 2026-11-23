@@ -528,6 +528,14 @@
         "hidden": {
           "name": "Ausgeblendet",
           "description": "Mitspieler in Auswahllisten ausblenden; Partien und Statistik bleiben."
+        },
+        "aliases": {
+          "name": "Weitere Namen",
+          "description": "Weitere Namen derselben Person (z. B. aus BGG-Partien); ihre Partien zählen bei diesem Mitspieler."
+        },
+        "person": {
+          "name": "Person",
+          "description": "Person in Home Assistant; ist sie zu Hause, ist der Mitspieler vorausgewählt. Leer = keine Verknüpfung."
         }
       }
     },

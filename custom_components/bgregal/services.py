@@ -131,6 +131,8 @@ SCHEMAS: dict[str, vol.Schema] = {
             vol.Optional("bgg_username"): vol.Any(None, cv.string),
             vol.Optional("dislikes"): vol.All(cv.ensure_list, [vol.In(DISLIKE_OPTIONS)]),
             vol.Optional("hidden"): cv.boolean,
+            vol.Optional("aliases"): vol.Any(None, NAMES),
+            vol.Optional("person"): vol.Any(None, "", cv.entity_domain("person")),
         }
     ),
     "remove_player": vol.Schema({vol.Required("name"): cv.string}),
@@ -254,7 +256,10 @@ async def _handle(regal: BgRegal, service: str, d: dict[str, Any]) -> dict[str, 
         case "reset_suggestion":
             await regal.async_reset_suggestion()
         case "set_player":
-            await regal.async_set_player(d["name"], d.get("bgg_username"), d.get("dislikes"), d.get("hidden"))
+            await regal.async_set_player(
+                d["name"], d.get("bgg_username"), d.get("dislikes"), d.get("hidden"),
+                d.get("aliases"), d.get("person"),
+            )
         case "remove_player":
             await regal.async_remove_player(d["name"])
         case "plan_evening":

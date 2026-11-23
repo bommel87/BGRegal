@@ -264,6 +264,15 @@ set_player:
     hidden:
       selector:
         boolean:
+    aliases:
+      example: '["Anna B.", "anna_b"]'
+      selector:
+        text:
+          multiple: true
+    person:
+      selector:
+        entity:
+          domain: person
 
 remove_player:
   fields:

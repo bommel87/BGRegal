@@ -133,6 +133,10 @@ SERVICES = {
         "dislikes": ("Dislikes", "Kinds of games this player does not like.", "Mag nicht", "Arten von Spielen, die dieser Mitspieler nicht mag."),
         "hidden": ("Hidden", "Hide this player from selection lists; plays and stats stay.",
                    "Ausgeblendet", "Mitspieler in Auswahllisten ausblenden; Partien und Statistik bleiben."),
+        "aliases": ("Other names", "Further names of the same person (e.g. from BGG plays); their plays count for this player.",
+                    "Weitere Namen", "Weitere Namen derselben Person (z. B. aus BGG-Partien); ihre Partien zählen bei diesem Mitspieler."),
+        "person": ("Person", "Person in Home Assistant; when at home, the player is preselected. Empty = no link.",
+                   "Person", "Person in Home Assistant; ist sie zu Hause, ist der Mitspieler vorausgewählt. Leer = keine Verknüpfung."),
     }),
     "remove_player": ("Remove player", "Removes a player you added yourself.", "Mitspieler entfernen", "Entfernt einen selbst angelegten Mitspieler.", {
         "name": ("Name", "Name of the player.", "Name", "Name des Mitspielers.")}),

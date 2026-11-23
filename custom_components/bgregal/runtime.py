@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_STATE_CHANGED, STATE_HOME
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import area_registry as ar
@@ -98,6 +99,10 @@ class BgRegal:
         self._unsubs.append(
             async_track_time_interval(self.hass, self._check_loans, timedelta(hours=1))
         )
+        # Kommt eine verknüpfte Person heim oder geht, soll das Panel die Vorauswahl neu zeigen
+        self._unsubs.append(self.hass.bus.async_listen(
+            EVENT_STATE_CHANGED, self._person_changed, event_filter=self._is_linked_person
+        ))
         self.hass.async_create_task(self._check_loans())
 
     async def async_stop(self) -> None:
@@ -272,6 +277,7 @@ class BgRegal:
             },
             "dislike_options": list(DISLIKE_OPTIONS),
             "inventory": self.inventory_state(),
+            "home_players": self.home_players(),
         }
 
     async def async_after_sync(self, result: SyncResult) -> None:
@@ -885,18 +891,56 @@ class BgRegal:
             await self._run(self.store.mark_reminded, loan["id"], today.isoformat())
 
     # ---- Mitspieler ----------------------------------------------------------
+    @callback
+    def _is_linked_person(self, data: dict[str, Any]) -> bool:
+        entity_id = data.get("entity_id", "")
+        return entity_id.startswith("person.") and any(
+            p.get("person") == entity_id for p in self.snapshot.get("players", [])
+        )
+
+    @callback
+    def _person_changed(self, event: Event) -> None:
+        old, new = event.data.get("old_state"), event.data.get("new_state")
+        if (old and old.state == STATE_HOME) != (new and new.state == STATE_HOME):
+            async_dispatcher_send(self.hass, SIGNAL_UPDATE)
+
+    def home_players(self) -> list[str]:
+        """Sichtbare Mitspieler, deren verknüpfte Person gerade zu Hause ist (nur „home“, keine Zonen)."""
+        return [
+            p["name"] for p in self.snapshot.get("players", [])
+            if p.get("person") and not p.get("hidden")
+            and (state := self.hass.states.get(p["person"])) is not None and state.state == STATE_HOME
+        ]
+
     async def async_set_player(
         self,
         name: str,
         bgg_username: str | None,
         dislikes: list[str] | None,
         hidden: bool | None = None,
+        aliases: list[str] | None = None,
+        person: str | None = None,
     ) -> None:
         name = name.strip()
         if not name:
             raise ServiceValidationError("Name fehlt")
         if name.lower() == self.me.lower():
             raise ServiceValidationError("Du selbst bist kein Mitspieler")
+        known = {p["name"].lower(): p for p in self.snapshot.get("players", [])}
+        main = next((p for p in known.values() if name.lower() in (a.lower() for a in p.get("aliases", []))), None)
+        if main is not None:
+            raise ServiceValidationError(f"„{name}“ ist „{main['name']}“ zugeordnet; dort bearbeiten oder erst trennen")
+        if aliases is not None:
+            aliases = list(dict.fromkeys(a.strip() for a in aliases if a.strip()))
+            for alias in aliases:
+                if alias.lower() in (name.lower(), self.me.lower()):
+                    raise ServiceValidationError(f"„{alias}“ kann nicht zugeordnet werden")
+                if known.get(alias.lower(), {}).get("aliases"):
+                    raise ServiceValidationError(f"„{alias}“ hat selbst zugeordnete Namen; erst dort trennen")
+        if person:
+            person = person.strip()
+            if not person.startswith("person.") or self.hass.states.get(person) is None:
+                raise ServiceValidationError(f"Die Person „{person}“ gibt es in Home Assistant nicht")
         if bgg_username:
             bgg_username = bgg_username.strip()
             try:
@@ -909,7 +953,7 @@ class BgRegal:
             unknown = set(dislikes) - set(DISLIKE_OPTIONS)
             if unknown:
                 raise ServiceValidationError(f"Unbekannte Vorliebe: {', '.join(sorted(unknown))}")
-        await self._run(self.store.set_player, name, bgg_username, dislikes, hidden)
+        await self._run(self.store.set_player, name, bgg_username, dislikes, hidden, aliases, person)
         await self.async_refresh()
 
     async def async_remove_player(self, name: str) -> None:

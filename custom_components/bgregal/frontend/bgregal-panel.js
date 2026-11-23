@@ -3,7 +3,7 @@
  * Reines JavaScript ohne Build-Schritt. Daten kommen über den WebSocket-Befehl bgregal/data,
  * Änderungen laufen über die Dienste der Integration.
  */
-import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.9.0";
+import { STRINGS, esc, fmtDate, location, naturalCompare, playersText } from "./bgregal-common.js?v=0.10.0";
 
 const TABS = ["shelf", "session", "suggest", "evenings", "players", "stats", "shame", "wishlist", "loans"];
 
@@ -596,14 +596,17 @@ class BgRegalPanel extends HTMLElement {
   _ensureFinish(s) {
     const key = `${s.bgg_id}-${s.started}`;
     if (!this._ui.finish || this._ui.finish.key !== key) {
-      this._ui.finish = { key, players: [...(s.order || [])], scores: {}, winners: [], note: "", newName: "" };
+      // Ohne Reihenfolge: wer laut Home Assistant zu Hause ist
+      const players = s.order?.length ? s.order : this._homePlayers();
+      this._ui.finish = { key, players: [...players], scores: {}, winners: [], note: "", newName: "" };
     }
     return this._ui.finish;
   }
 
   _view_suggest() {
     const t = this._t, f = this._ui.sug, sug = this._data.suggestion;
-    const sel = (key, options, labels) => `<select data-k="sug.${key}">${options.map((o) => `<option value="${o}" ${String(f[key]) === String(o) ? "selected" : ""}>${labels[o]}</option>`).join("")}</select>`;
+    if (!f.touched) f.attendees = this._homePlayers(); // folgt der Anwesenheit, bis man selbst wählt
+    const sel =(key, options, labels) => `<select data-k="sug.${key}">${options.map((o) => `<option value="${o}" ${String(f[key]) === String(o) ? "selected" : ""}>${labels[o]}</option>`).join("")}</select>`;
     const form = `<section class="card">
       <div class="form">
         <label>${t.players}<input type="number" min="1" max="20" value="${esc(f.players)}" data-k="sug.players"></label>
@@ -670,6 +673,16 @@ class BgRegalPanel extends HTMLElement {
     return this._data.players.filter((p) => !p.hidden);
   }
 
+  /** Mitspieler, deren verknüpfte Person gerade zu Hause ist (für die Vorauswahl). */
+  _homePlayers() {
+    return [...(this._data.home_players || [])];
+  }
+
+  _personName(entityId) {
+    const state = this._hass.states[entityId];
+    return state?.attributes.friendly_name || entityId;
+  }
+
   _view_players() {
     const t = this._t, edits = this._ui.playerEdit;
     const hidden = this._data.players.filter((p) => p.hidden);
@@ -677,13 +690,28 @@ class BgRegalPanel extends HTMLElement {
       <p class="muted small">${t.hiddenHint}</p>
       <ul class="hidden-list">${hidden.map((p) => `<li><span>${esc(p.name)}</span><span class="muted small">${p.plays} ${p.plays === 1 ? t.playOne : t.playsShort}</span>
         <button data-a="plunhide" data-v="${esc(p.name)}">${t.unhide}</button></li>`).join("")}</ul></details>` : "";
+    const persons = Object.keys(this._hass.states).filter((id) => id.startsWith("person.")).sort();
+    const home = new Set(this._homePlayers());
     const rows = this._activePlayers().map((p) => {
       const e = edits[p.name];
       const dislikes = (e ? e.dislikes : p.dislikes);
+      const aliases = e ? e.aliases : (p.aliases || []);
+      // Zuordnen lassen sich andere Spieler, die selbst keine weiteren Namen haben
+      const candidates = this._data.players.filter((x) => x.name !== p.name && !(x.aliases || []).length
+        && !aliases.some((a) => a.toLowerCase() === x.name.toLowerCase()));
+      const person = p.person ? `<span class="small ${home.has(p.name) ? "ok" : "muted"}">${home.has(p.name) ? "🏠 " : ""}${esc(this._personName(p.person))}${home.has(p.name) ? ` · ${t.atHome}` : ""}</span>` : "";
       return `<section class="card player">
         <div class="phead"><h2>${esc(p.name)}</h2><span class="muted">${p.plays} ${p.plays === 1 ? t.playOne : t.playsShort}</span>
-          ${p.bgg_username ? `<a class="small" href="https://boardgamegeek.com/user/${encodeURIComponent(p.bgg_username)}" target="_blank" rel="noreferrer">BGG: ${esc(p.bgg_username)}</a>` : ""}</div>
-        ${e ? `<div class="form"><label>${t.bggUser}<input value="${esc(e.bgg_username)}" data-k="pl.${esc(p.name)}.bgg_username"></label></div>
+          ${p.bgg_username ? `<a class="small" href="https://boardgamegeek.com/user/${encodeURIComponent(p.bgg_username)}" target="_blank" rel="noreferrer">BGG: ${esc(p.bgg_username)}</a>` : ""}${e ? "" : person}</div>
+        ${!e && aliases.length ? `<div class="muted small">${t.alsoKnown.replace("{names}", esc(aliases.join(", ")))}</div>` : ""}
+        ${e ? `<div class="form"><label>${t.bggUser}<input value="${esc(e.bgg_username)}" data-k="pl.${esc(p.name)}.bgg_username"></label>
+          <label>${t.person}<select data-k="pl.${esc(p.name)}.person"><option value="">${t.noPerson}</option>${persons.map((id) =>
+            `<option value="${esc(id)}" ${e.person === id ? "selected" : ""}>${esc(this._personName(id))}</option>`).join("")}</select></label></div>
+          <h3>${t.aliases}</h3>
+          ${aliases.length ? `<ul class="aliases">${aliases.map((a) => `<li>${esc(a)} <button class="link" data-a="plunalias" data-v="${esc(p.name)}|${esc(a)}">${t.unlink}</button></li>`).join("")}</ul>` : ""}
+          ${candidates.length ? `<select data-k="pl.${esc(p.name)}.addalias"><option value="">${t.addAlias}</option>${candidates.map((x) =>
+            `<option value="${esc(x.name)}">${esc(x.name)} (${x.plays} ${x.plays === 1 ? t.playOne : t.playsShort})</option>`).join("")}</select>` : ""}
+          <p class="muted small">${t.aliasHint}</p>
           <h3>${t.dislikes}</h3><div class="chips">${this._data.dislike_options.map((d) => `<button class="chip ${dislikes.includes(d) ? "on" : ""}" data-a="pldis" data-v="${esc(p.name)}|${d}">${t.modes[d] || t.types[d]}</button>`).join("")}</div>
           <div class="row"><button class="primary" data-a="plsave" data-v="${esc(p.name)}">${t.save}</button><button data-a="plcancel" data-v="${esc(p.name)}">${t.cancel}</button>
           ${p.from_bgg ? "" : `<button class="danger" data-a="plremove" data-v="${esc(p.name)}">${t.remove}</button>`}</div>`
@@ -792,7 +820,15 @@ class BgRegalPanel extends HTMLElement {
     }
     if (head === "sug") { ui.sug[rest[0]] = v; return; }
     if (head === "ev") { ui.evening[rest[0]] = v; if (rest[0] === "newGuest" || rest[0] === "start") this._render(); return; }
-    if (head === "pl") { const name = rest.slice(0, -1).join("."); ui.playerEdit[name][rest.at(-1)] = v; return; }
+    if (head === "pl") {
+      const name = rest.slice(0, -1).join("."), field = rest.at(-1);
+      if (field === "addalias") {
+        if (e.type === "change" && v) { ui.playerEdit[name].aliases.push(v); this._render(); }
+        return;
+      }
+      ui.playerEdit[name][field] = v;
+      return;
+    }
     if (head === "cand" && e.type === "change" && v) {
       const evening = this._data.evenings.find((x) => x.id === Number(rest[0]));
       this._call("set_candidates", { evening_id: evening.id, candidates: [...evening.candidates, Number(v)] });
@@ -914,7 +950,7 @@ class BgRegalPanel extends HTMLElement {
         if (res) ui.qr = { title: t.toBgStats, svg: res.qr_svg, url: res.url, open: t.openBgStats, hint: t.qrHint };
         break;
       }
-      case "att": { const f = ui.sug; f.attendees = f.attendees.includes(v) ? f.attendees.filter((n) => n !== v) : [...f.attendees, v]; break; }
+      case "att": { const f = ui.sug; f.touched = true; f.attendees = f.attendees.includes(v) ? f.attendees.filter((n) => n !== v) : [...f.attendees, v]; break; }
       case "suggest": {
         const f = ui.sug, data = { mode: f.mode, game_type: f.game_type };
         if (f.players) data.players = Number(f.players);
@@ -926,7 +962,7 @@ class BgRegalPanel extends HTMLElement {
       case "sugaccept": await this._call("accept_suggestion", {}, true); return;
       case "sugreject": await this._call("reject_suggestion", {}, true); return;
       case "sugreset": await this._call("reset_suggestion"); return;
-      case "evnew": ui.evening = { title: t.gameNight, start: nextFriday(), max_playtime: "", guests: [], newGuest: "" }; break;
+      case "evnew": ui.evening = { title: t.gameNight, start: nextFriday(), max_playtime: "", guests: this._homePlayers(), newGuest: "" }; break;
       case "evcancel": ui.evening = null; break;
       case "evguest": { const ev = ui.evening; ev.guests = ev.guests.includes(v) ? ev.guests.filter((n) => n !== v) : [...ev.guests, v]; break; }
       case "evaddguest": { const ev = ui.evening; const n = ev.newGuest.trim(); if (n && !ev.guests.includes(n)) ev.guests.push(n); ev.newGuest = ""; break; }
@@ -950,7 +986,17 @@ class BgRegalPanel extends HTMLElement {
         return;
       }
       case "pladd": if (await this._call("set_player", { name: ui.newPlayer.trim() })) ui.newPlayer = ""; return;
-      case "pledit": { const p = this._data.players.find((x) => x.name === v); ui.playerEdit[v] = { bgg_username: p.bgg_username || "", dislikes: [...p.dislikes] }; break; }
+      case "pledit": {
+        const p = this._data.players.find((x) => x.name === v);
+        ui.playerEdit[v] = { bgg_username: p.bgg_username || "", dislikes: [...p.dislikes], aliases: [...(p.aliases || [])], person: p.person || "" };
+        break;
+      }
+      case "plunalias": {
+        const [name, alias] = v.split("|");
+        const pe = ui.playerEdit[name];
+        pe.aliases = pe.aliases.filter((x) => x !== alias);
+        break;
+      }
       case "plcancel": delete ui.playerEdit[v]; break;
       case "pldis": {
         const [name, d] = v.split("|");
@@ -960,7 +1006,7 @@ class BgRegalPanel extends HTMLElement {
       }
       case "plsave": {
         const pe = ui.playerEdit[v];
-        if (await this._call("set_player", { name: v, bgg_username: pe.bgg_username.trim(), dislikes: pe.dislikes })) delete ui.playerEdit[v];
+        if (await this._call("set_player", { name: v, bgg_username: pe.bgg_username.trim(), dislikes: pe.dislikes, aliases: pe.aliases, person: pe.person })) delete ui.playerEdit[v];
         return;
       }
       case "hiddentoggle": ui.hiddenOpen = !ui.hiddenOpen; break;
@@ -1533,6 +1579,8 @@ const CSS = `
   ol.ranking li > * { margin-right: 8px; }
   .past { opacity: .6; }
   .phead { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
+  .phead .ok { color: var(--success-color, #43a047); }
+  ul.aliases { margin: 0 0 8px; padding-left: 18px; }
   .player .row { margin: 4px 0 0; gap: 16px; }
   button.link.muted { color: var(--secondary-text-color); }
   .hidden-players summary { cursor: pointer; font-weight: 500; }

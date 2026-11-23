@@ -110,7 +110,9 @@ CREATE TABLE IF NOT EXISTS players (
     name TEXT PRIMARY KEY COLLATE NOCASE,
     bgg_username TEXT NOT NULL DEFAULT '',
     dislikes TEXT NOT NULL DEFAULT '[]',
-    hidden INTEGER NOT NULL DEFAULT 0
+    hidden INTEGER NOT NULL DEFAULT 0,
+    aliases TEXT NOT NULL DEFAULT '[]',
+    person TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS session (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -161,6 +163,8 @@ COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("shelves", "position", "INTEGER"),
     ("shelves", "reversed", "INTEGER NOT NULL DEFAULT 0"),
     ("shelves", "game_sort", "TEXT NOT NULL DEFAULT 'name'"),
+    ("players", "aliases", "TEXT NOT NULL DEFAULT '[]'"),  # weitere Namen derselben Person
+    ("players", "person", "TEXT NOT NULL DEFAULT ''"),  # person.* in Home Assistant
 )
 
 META_FIELDS = ("shelf", "compartment", "in_base", "nfc_tag", "light_profile", "playlist", "manual_url", "ean", "position", "links", "in_box")
@@ -360,9 +364,11 @@ class Store:
             ids,
         )
         by_play: dict[int, list[dict[str, Any]]] = {}
+        aliases = self.alias_map()  # zugeordnete Namen unter dem Hauptnamen zeigen
         for r in rows:
             by_play.setdefault(r["play_id"], []).append(
-                {"name": r["name"], "username": r["username"], "score": r["score"], "win": bool(r["win"])}
+                {"name": aliases.get(r["name"].lower(), r["name"]), "username": r["username"],
+                 "score": r["score"], "win": bool(r["win"])}
             )
         for p in plays:
             p["players"] = by_play.get(p["play_id"], [])
@@ -553,34 +559,70 @@ class Store:
         self._write("UPDATE loans SET reminded = ? WHERE id = ?", (when, loan_id))
 
     # ---- Mitspieler ----------------------------------------------------------
+    def alias_map(self) -> dict[str, str]:
+        """Zugeordneter Name (klein) -> Hauptname, z. B. {"anna b.": "Anna"}."""
+        return {
+            alias.lower(): r["name"]
+            for r in self._rows("SELECT name, aliases FROM players WHERE aliases != '[]'")
+            for alias in json.loads(r["aliases"] or "[]")
+        }
+
     def players(self, me: str) -> list[dict[str, Any]]:
-        """Mitspieler aus den BGG-Partien plus selbst angelegte; ohne einen selbst."""
+        """Mitspieler aus den BGG-Partien plus selbst angelegte; ohne einen selbst.
+
+        Zugeordnete Namen erscheinen nicht einzeln: Ihre Partien zählen beim Hauptnamen mit."""
         me = me.lower()
+        aliases = self.alias_map()
         result: dict[str, dict[str, Any]] = {}
-        for r in self._rows(
-            """SELECT name, MAX(username) AS username, COUNT(DISTINCT play_id) AS plays
-               FROM play_players GROUP BY lower(name)"""
-        ):
+        play_ids: dict[str, set[int]] = {}
+        for r in self._rows("SELECT play_id, name, username FROM play_players"):
             if (r["username"] or "").lower() == me or r["name"].lower() == me:
                 continue
-            result[r["name"].lower()] = {
-                "name": r["name"], "bgg_username": r["username"] or "", "dislikes": [],
-                "plays": r["plays"], "from_bgg": True, "hidden": False,
-            }
+            main = aliases.get(r["name"].lower(), r["name"])
+            entry = result.setdefault(main.lower(), {
+                "name": main, "bgg_username": "", "dislikes": [], "plays": 0, "from_bgg": True,
+                "hidden": False, "aliases": [], "person": "",
+            })
+            if r["username"] and not entry["bgg_username"] and main.lower() == r["name"].lower():
+                entry["bgg_username"] = r["username"]
+            play_ids.setdefault(main.lower(), set()).add(r["play_id"])
+        for key, ids in play_ids.items():
+            result[key]["plays"] = len(ids)  # eine Partie zählt einmal, auch mit zwei Namen darin
         for r in self._rows("SELECT * FROM players"):
+            if r["name"].lower() in aliases:
+                continue  # selbst einem anderen zugeordnet
             entry = result.setdefault(
                 r["name"].lower(), {"name": r["name"], "plays": 0, "from_bgg": False}
             )
             entry["bgg_username"] = r["bgg_username"] or entry.get("bgg_username", "")
             entry["dislikes"] = json.loads(r["dislikes"] or "[]")
             entry["hidden"] = bool(r["hidden"])
+            entry["aliases"] = json.loads(r["aliases"] or "[]")
+            entry["person"] = r["person"] or ""
         return sorted(result.values(), key=lambda p: (-p["plays"], p["name"].lower()))
 
     def set_player(
-        self, name: str, bgg_username: str | None, dislikes: list[str] | None, hidden: bool | None = None
+        self,
+        name: str,
+        bgg_username: str | None,
+        dislikes: list[str] | None,
+        hidden: bool | None = None,
+        aliases: list[str] | None = None,
+        person: str | None = None,
     ) -> None:
         with self._lock, self._db:
             self._db.execute("INSERT OR IGNORE INTO players (name) VALUES (?)", (name,))
+            if aliases is not None:
+                # Ein Name gehört nur zu einem Spieler: bei anderen austragen
+                wanted = {a.lower() for a in aliases}
+                for r in self._db.execute(
+                    "SELECT name, aliases FROM players WHERE aliases != '[]' AND name != ?", (name,)
+                ).fetchall():
+                    rest = [a for a in json.loads(r["aliases"]) if a.lower() not in wanted]
+                    self._db.execute("UPDATE players SET aliases = ? WHERE name = ?", (json.dumps(rest), r["name"]))
+                self._db.execute("UPDATE players SET aliases = ? WHERE name = ?", (json.dumps(aliases), name))
+            if person is not None:
+                self._db.execute("UPDATE players SET person = ? WHERE name = ?", (person, name))
             if hidden is not None:
                 self._db.execute("UPDATE players SET hidden = ? WHERE name = ?", (int(hidden), name))
             if bgg_username is not None:

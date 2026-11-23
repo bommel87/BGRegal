@@ -172,6 +172,27 @@ def test_hide_player(store):
     assert not next(p for p in store.players("susi") if p["name"] == "Anna")["hidden"]
 
 
+def test_merge_players(store):
+    asyncio.run(run_sync(FakeClient(), store, direct, NOW))
+    # „Anna“ aus den BGG-Partien gehört zu Ben: ihre Partie zählt bei Ben, Anna verschwindet aus der Liste
+    store.set_player("Ben", None, None, aliases=["Anna"], person="person.ben")
+    players = {p["name"]: p for p in store.players("susi")}
+    assert "Anna" not in players
+    assert players["Ben"]["plays"] == 1 and players["Ben"]["aliases"] == ["Anna"]
+    assert players["Ben"]["person"] == "person.ben"
+    assert [p["name"] for p in store.game(13)["last_players"]] == ["Susi", "Ben"]
+    assert store.alias_map() == {"anna": "Ben"}
+
+    # Ein Name gehört nur zu einem Spieler: Zuordnung zu Carl nimmt ihn Ben weg
+    store.set_player("Carl", None, None, aliases=["anna"])
+    players = {p["name"]: p for p in store.players("susi")}
+    assert players["Ben"]["aliases"] == [] and players["Carl"]["plays"] == 1
+
+    # Trennen: Anna ist wieder ein eigener Spieler
+    store.set_player("Carl", None, None, aliases=[])
+    assert {p["name"] for p in store.players("susi")} == {"Anna", "Ben", "Carl"}
+
+
 def test_migrates_schema_1(tmp_path):
     """Eine Datenbank aus Version 0.1.x (ohne Spalte hidden) wird beim Öffnen ergänzt."""
     path = tmp_path / "alt.db"
@@ -188,7 +209,8 @@ def test_migrates_schema_1(tmp_path):
     try:
         assert s.get_meta("schema") == "6"
         assert s.players("susi") == [
-            {"name": "Ben", "plays": 0, "from_bgg": False, "bgg_username": "", "dislikes": [], "hidden": False}
+            {"name": "Ben", "plays": 0, "from_bgg": False, "bgg_username": "", "dislikes": [], "hidden": False,
+             "aliases": [], "person": ""}
         ]
         s.set_player("Ben", None, None, hidden=True)
         assert s.players("susi")[0]["hidden"]
